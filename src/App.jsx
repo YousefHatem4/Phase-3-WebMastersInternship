@@ -19,6 +19,7 @@ import ResetPassword from './components/ResetPassword/ResetPassword'
 import ProductDetails from './components/ProductDetails/ProductDetails'
 import Checkout from './components/CheckOut/Checkout'
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute'
+import Admin from './components/Admin/Admin'
 
 
 
@@ -42,6 +43,7 @@ const routers = createBrowserRouter([
       { path: 'verfiycode', element: <VerfiyCode /> },
       { path: 'resetpassword', element: <ResetPassword /> },
       { path: 'checkout', element: <ProtectedRoute><Checkout /></ProtectedRoute> },
+      { path: 'admin', element: <ProtectedRoute><Admin /></ProtectedRoute> },
       { path: 'productdetails/:id', element: <ProductDetails /> },
       { path: '*', element: <NotFound /> },
     ]
