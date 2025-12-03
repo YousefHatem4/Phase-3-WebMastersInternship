@@ -518,30 +518,7 @@ export default function Admin() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-teal-50/30">
-            {/* Header */}
-            <header className="bg-gradient-to-r from-blue-600 to-teal-500 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                                <FaBox className="text-blue-600 text-xl" />
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-bold">Sportswear Admin</h1>
-                                <p className="text-sm opacity-90">Product Management Dashboard</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                            >
-                                <FaSignOutAlt /> Logout
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </header>
+          
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="flex flex-col lg:flex-row gap-8">
