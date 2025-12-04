@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { FaBox, FaChartLine, FaSignOutAlt, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaBox, FaUsers, FaShoppingCart, FaChartLine, FaCog, FaSignOutAlt, FaPlus, FaEdit, FaTrash, FaEye } from 'react-icons/fa';
 
 export default function Admin() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [products, setProducts] = useState([]);
+    const [orders, setOrders] = useState([]);
+    const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
     // Form states
@@ -25,7 +27,7 @@ export default function Admin() {
         {
             id: '1',
             title: 'Running Shoes Pro',
-            description: 'Premium running shoes with advanced cushioning technology for maximum comfort.',
+            description: 'Premium running shoes with advanced cushioning',
             price: 129.99,
             category: 'Shoes',
             stock: 50,
@@ -35,8 +37,8 @@ export default function Admin() {
         },
         {
             id: '2',
-            title: 'Basketball Jersey Elite',
-            description: 'High-performance basketball jersey with moisture-wicking fabric.',
+            title: 'Basketball Jersey',
+            description: 'High-performance basketball jersey',
             price: 79.99,
             category: 'Clothing',
             stock: 75,
@@ -46,8 +48,8 @@ export default function Admin() {
         },
         {
             id: '3',
-            title: 'Yoga Leggings Premium',
-            description: 'Buttery-soft yoga leggings with four-way stretch for maximum flexibility.',
+            title: 'Yoga Leggings',
+            description: 'Buttery-soft yoga leggings with four-way stretch',
             price: 59.99,
             category: 'Clothing',
             stock: 60,
@@ -58,47 +60,35 @@ export default function Admin() {
         {
             id: '4',
             title: 'Training Shorts',
-            description: 'Lightweight training shorts with built-in compression liner.',
+            description: 'Lightweight training shorts with compression liner',
             price: 45.99,
             category: 'Clothing',
             stock: 40,
             image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=300&h=300&fit=crop',
             createdAt: '2024-01-28',
             sales: 70
-        },
-        {
-            id: '5',
-            title: 'Football Cleats Pro',
-            description: 'Professional-grade football cleats with advanced traction technology.',
-            price: 149.99,
-            category: 'Shoes',
-            stock: 30,
-            image: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=300&h=300&fit=crop',
-            createdAt: '2024-01-30',
-            sales: 45
-        },
-        {
-            id: '6',
-            title: 'Cycling Jersey Aero',
-            description: 'Aerodynamic cycling jersey with breathable mesh panels.',
-            price: 95.99,
-            category: 'Clothing',
-            stock: 55,
-            image: 'https://images.unsplash.com/photo-1586351012965-8616a6d382aa?w=300&h=300&fit=crop',
-            createdAt: '2024-02-01',
-            sales: 38
         }
     ];
 
-    // Calculate dashboard stats
-    const totalProducts = products.length;
-    const totalStock = products.reduce((sum, product) => sum + product.stock, 0);
-    const totalSales = products.reduce((sum, product) => sum + product.sales, 0);
-    const totalRevenue = products.reduce((sum, product) => sum + (product.sales * product.price), 0);
+    const demoOrders = [
+        { id: 'ORD001', customer: 'John Doe', date: '2024-01-30', amount: 249.98, status: 'Delivered' },
+        { id: 'ORD002', customer: 'Jane Smith', date: '2024-01-29', amount: 159.99, status: 'Processing' },
+        { id: 'ORD003', customer: 'Bob Johnson', date: '2024-01-28', amount: 89.99, status: 'Pending' },
+        { id: 'ORD004', customer: 'Alice Brown', date: '2024-01-27', amount: 329.97, status: 'Delivered' },
+    ];
+
+    const demoUsers = [
+        { id: '1', name: 'John Doe', email: 'john@example.com', joined: '2024-01-15', orders: 5 },
+        { id: '2', name: 'Jane Smith', email: 'jane@example.com', joined: '2024-01-20', orders: 3 },
+        { id: '3', name: 'Bob Johnson', email: 'bob@example.com', joined: '2024-01-25', orders: 8 },
+        { id: '4', name: 'Alice Brown', email: 'alice@example.com', joined: '2024-01-28', orders: 2 },
+    ];
 
     useEffect(() => {
         // Load demo data
         setProducts(demoProducts);
+        setOrders(demoOrders);
+        setUsers(demoUsers);
         document.title = 'Admin Panel - Sportswear Store';
     }, []);
 
@@ -175,34 +165,10 @@ export default function Admin() {
     };
 
     const stats = [
-        {
-            title: 'Total Products',
-            value: totalProducts,
-            icon: <FaBox className="text-2xl" />,
-            color: 'bg-gradient-to-r from-blue-500 to-blue-600',
-            description: 'Active products in store'
-        },
-        {
-            title: 'Total Stock',
-            value: totalStock,
-            icon: <FaBox className="text-2xl" />,
-            color: 'bg-gradient-to-r from-green-500 to-green-600',
-            description: 'Units available'
-        },
-        {
-            title: 'Total Sales',
-            value: totalSales,
-            icon: <FaChartLine className="text-2xl" />,
-            color: 'bg-gradient-to-r from-purple-500 to-purple-600',
-            description: 'Units sold'
-        },
-        {
-            title: 'Total Revenue',
-            value: `$${totalRevenue.toFixed(2)}`,
-            icon: <FaChartLine className="text-2xl" />,
-            color: 'bg-gradient-to-r from-orange-500 to-orange-600',
-            description: 'Revenue generated'
-        }
+        { title: 'Total Products', value: products.length, icon: <FaBox />, color: 'bg-gradient-to-r from-blue-500 to-blue-600' },
+        { title: 'Total Orders', value: orders.length, icon: <FaShoppingCart />, color: 'bg-gradient-to-r from-green-500 to-green-600' },
+        { title: 'Total Users', value: users.length, icon: <FaUsers />, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
+        { title: 'Revenue', value: `$${orders.reduce((sum, order) => sum + order.amount, 0).toFixed(2)}`, icon: <FaChartLine />, color: 'bg-gradient-to-r from-orange-500 to-orange-600' }
     ];
 
     const categories = ['Shoes', 'Clothing', 'Accessories', 'Equipment'];
@@ -214,20 +180,6 @@ export default function Admin() {
             transition={{ duration: 0.5 }}
             className="space-y-6"
         >
-            {/* Welcome Header */}
-            <div className="bg-gradient-to-r from-blue-50 to-teal-50 rounded-2xl p-6 border border-blue-100">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-800">Welcome back, Admin!</h2>
-                        <p className="text-gray-600 mt-1">Here's what's happening with your store today.</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-sm text-gray-500">Last updated</p>
-                        <p className="font-medium">{new Date().toLocaleDateString()}</p>
-                    </div>
-                </div>
-            </div>
-
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat, index) => (
@@ -238,152 +190,52 @@ export default function Admin() {
                         transition={{ duration: 0.5, delay: index * 0.1 }}
                         className={`${stat.color} text-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}
                     >
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="opacity-80">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm opacity-90">{stat.title}</p>
+                                <p className="text-2xl font-bold mt-2">{stat.value}</p>
+                            </div>
+                            <div className="text-3xl opacity-80">
                                 {stat.icon}
                             </div>
-                            <div className="text-right">
-                                <p className="text-sm opacity-90">{stat.title}</p>
-                                <p className="text-2xl font-bold mt-1">{stat.value}</p>
-                            </div>
                         </div>
-                        <p className="text-sm opacity-80">{stat.description}</p>
                     </motion.div>
                 ))}
             </div>
 
-            {/* Top Selling Products */}
+            {/* Recent Orders */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Top Selling Products</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Recent Orders</h3>
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead>
                             <tr className="bg-gray-50">
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Product</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Category</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Price</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Stock</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Sales</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Revenue</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Order ID</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Customer</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Date</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Amount</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {products
-                                .sort((a, b) => b.sales - a.sales)
-                                .slice(0, 5)
-                                .map((product) => (
-                                    <tr key={product.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                        <td className="py-3 px-4">
-                                            <div className="flex items-center gap-3">
-                                                <img
-                                                    src={product.image}
-                                                    alt={product.title}
-                                                    className="w-10 h-10 rounded object-cover"
-                                                />
-                                                <span className="font-medium text-gray-800">{product.title}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-3 px-4 text-sm text-gray-600">{product.category}</td>
-                                        <td className="py-3 px-4 text-sm text-gray-600">${product.price}</td>
-                                        <td className="py-3 px-4">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${product.stock > 20 ? 'bg-green-100 text-green-800' :
-                                                    product.stock > 10 ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-red-100 text-red-800'
-                                                }`}>
-                                                {product.stock} units
-                                            </span>
-                                        </td>
-                                        <td className="py-3 px-4 text-sm font-medium text-gray-800">{product.sales}</td>
-                                        <td className="py-3 px-4 text-sm font-medium text-green-600">
-                                            ${(product.sales * product.price).toFixed(2)}
-                                        </td>
-                                    </tr>
-                                ))}
+                            {orders.map((order) => (
+                                <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                    <td className="py-3 px-4 text-sm text-gray-800 font-medium">{order.id}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-600">{order.customer}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-600">{order.date}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-600">${order.amount}</td>
+                                    <td className="py-3 px-4">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
+                                                order.status === 'Processing' ? 'bg-blue-100 text-blue-800' :
+                                                    'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                            {order.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
-                </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-r from-blue-50 to-teal-50 rounded-2xl p-6 border border-blue-100">
-                    <h4 className="font-bold text-gray-800 mb-3">Quick Actions</h4>
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => {
-                                setEditingProduct(null);
-                                setProductForm({
-                                    title: '',
-                                    description: '',
-                                    price: '',
-                                    category: '',
-                                    stock: '',
-                                    image: ''
-                                });
-                                setShowProductModal(true);
-                                setActiveTab('products');
-                            }}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300"
-                        >
-                            <FaPlus /> Add New Product
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('products')}
-                            className="w-full px-4 py-3 border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors"
-                        >
-                            View All Products
-                        </button>
-                    </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
-                    <h4 className="font-bold text-gray-800 mb-3">Low Stock Alert</h4>
-                    <div className="space-y-3">
-                        {products
-                            .filter(p => p.stock <= 10)
-                            .slice(0, 3)
-                            .map(product => (
-                                <div key={product.id} className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                                    <div>
-                                        <p className="font-medium text-gray-800">{product.title}</p>
-                                        <p className="text-sm text-gray-600">Stock: {product.stock}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => handleEditProduct(product)}
-                                        className="px-3 py-1 bg-red-100 text-red-600 text-sm rounded hover:bg-red-200 transition-colors"
-                                    >
-                                        Restock
-                                    </button>
-                                </div>
-                            ))}
-                        {products.filter(p => p.stock <= 10).length === 0 && (
-                            <p className="text-gray-500 text-center py-2">All products have sufficient stock</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-purple-50 to-violet-50 rounded-2xl p-6 border border-purple-100">
-                    <h4 className="font-bold text-gray-800 mb-3">Recent Activity</h4>
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <FaPlus className="text-blue-500" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-gray-800">New product added</p>
-                                <p className="text-sm text-gray-600">Running Shoes Pro</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 bg-white rounded-lg border">
-                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                <FaEdit className="text-green-500" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-gray-800">Product updated</p>
-                                <p className="text-sm text-gray-600">Basketball Jersey</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </motion.div>
@@ -396,12 +248,9 @@ export default function Admin() {
             transition={{ duration: 0.5 }}
             className="space-y-6"
         >
-            {/* Header with Stats and Add Button */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h3 className="text-2xl font-bold text-gray-800">Product Management</h3>
-                    <p className="text-gray-600">Manage all your products in one place</p>
-                </div>
+            {/* Header with Add Button */}
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">Product Management</h3>
                 <button
                     onClick={() => {
                         setEditingProduct(null);
@@ -415,137 +264,247 @@ export default function Admin() {
                         });
                         setShowProductModal(true);
                     }}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300"
                 >
-                    <FaPlus /> Add New Product
+                    <FaPlus /> Add Product
                 </button>
             </div>
 
             {/* Products Grid */}
-            {products.length === 0 ? (
-                <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-                    <div className="w-20 h-20 mx-auto mb-6 text-gray-300">
-                        <FaBox className="text-6xl" />
-                    </div>
-                    <h3 className="text-2xl font-semibold text-gray-800 mb-2">No products yet</h3>
-                    <p className="text-gray-600 mb-6">Start by adding your first product</p>
-                    <button
-                        onClick={() => {
-                            setEditingProduct(null);
-                            setProductForm({
-                                title: '',
-                                description: '',
-                                price: '',
-                                category: '',
-                                stock: '',
-                                image: ''
-                            });
-                            setShowProductModal(true);
-                        }}
-                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {products.map((product) => (
+                    <motion.div
+                        key={product.id}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300"
                     >
-                        Add Your First Product
+                        <div className="relative h-48 overflow-hidden">
+                            <img
+                                src={product.image}
+                                alt={product.title}
+                                className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                            />
+                            <div className="absolute top-3 right-3 flex gap-2">
+                                <button
+                                    onClick={() => handleEditProduct(product)}
+                                    className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                                >
+                                    <FaEdit className="text-blue-500" />
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteProduct(product.id)}
+                                    className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                                >
+                                    <FaTrash className="text-red-500" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-5">
+                            <h4 className="font-bold text-lg text-gray-800 truncate">{product.title}</h4>
+                            <p className="text-gray-600 text-sm mt-1 line-clamp-2">{product.description}</p>
+                            <div className="flex justify-between items-center mt-4">
+                                <div>
+                                    <p className="text-blue-600 font-bold">${product.price}</p>
+                                    <p className="text-sm text-gray-500">Stock: {product.stock}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm text-gray-500">{product.category}</p>
+                                    <p className="text-xs text-gray-400">Sales: {product.sales}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </motion.div>
+    );
+
+    const renderOrders = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <h3 className="text-xl font-bold text-gray-800">Order Management</h3>
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                        <thead>
+                            <tr className="bg-gradient-to-r from-blue-50 to-teal-50">
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Order ID</th>
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Customer</th>
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Date</th>
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Amount</th>
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Status</th>
+                                <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {orders.map((order) => (
+                                <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                    <td className="py-4 px-6 text-sm font-medium text-gray-800">{order.id}</td>
+                                    <td className="py-4 px-6 text-sm text-gray-600">{order.customer}</td>
+                                    <td className="py-4 px-6 text-sm text-gray-600">{order.date}</td>
+                                    <td className="py-4 px-6 text-sm text-gray-600">${order.amount}</td>
+                                    <td className="py-4 px-6">
+                                        <select
+                                            defaultValue={order.status}
+                                            className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="Pending">Pending</option>
+                                            <option value="Processing">Processing</option>
+                                            <option value="Shipped">Shipped</option>
+                                            <option value="Delivered">Delivered</option>
+                                            <option value="Cancelled">Cancelled</option>
+                                        </select>
+                                    </td>
+                                    <td className="py-4 px-6">
+                                        <div className="flex gap-2">
+                                            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
+                                                <FaEye />
+                                            </button>
+                                            <button className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors">
+                                                <FaEdit />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </motion.div>
+    );
+
+    const renderUsers = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <h3 className="text-xl font-bold text-gray-800">User Management</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {users.map((user) => (
+                    <div key={user.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">
+                                {user.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-gray-800">{user.name}</h4>
+                                <p className="text-sm text-gray-600">{user.email}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p className="text-gray-500">Joined</p>
+                                <p className="font-medium">{user.joined}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500">Orders</p>
+                                <p className="font-medium">{user.orders}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                            <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
+                                View
+                            </button>
+                            <button className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
+                                Block
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+
+    const renderSettings = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <h3 className="text-xl font-bold text-gray-800">Settings</h3>
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="space-y-6">
+                    <div>
+                        <h4 className="font-semibold text-gray-700 mb-3">Store Information</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input
+                                type="text"
+                                placeholder="Store Name"
+                                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                defaultValue="Sportswear Store"
+                            />
+                            <input
+                                type="email"
+                                placeholder="Contact Email"
+                                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                defaultValue="admin@sportswear.com"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 className="font-semibold text-gray-700 mb-3">Payment Settings</h4>
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-3">
+                                <input type="checkbox" defaultChecked className="rounded text-blue-500" />
+                                <span>Enable Credit Card Payments</span>
+                            </label>
+                            <label className="flex items-center gap-3">
+                                <input type="checkbox" defaultChecked className="rounded text-blue-500" />
+                                <span>Enable PayPal</span>
+                            </label>
+                            <label className="flex items-center gap-3">
+                                <input type="checkbox" defaultChecked className="rounded text-blue-500" />
+                                <span>Enable Cash on Delivery</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button className="px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300">
+                        Save Settings
                     </button>
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {products.map((product) => (
-                        <motion.div
-                            key={product.id}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.3 }}
-                            className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 group"
-                        >
-                            <div className="relative h-48 overflow-hidden">
-                                <img
-                                    src={product.image}
-                                    alt={product.title}
-                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                />
-                                <div className="absolute top-3 right-3 flex gap-2">
-                                    <button
-                                        onClick={() => handleEditProduct(product)}
-                                        className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow hover:scale-110"
-                                        title="Edit Product"
-                                    >
-                                        <FaEdit className="text-blue-500 text-sm" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteProduct(product.id)}
-                                        className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow hover:scale-110"
-                                        title="Delete Product"
-                                    >
-                                        <FaTrash className="text-red-500 text-sm" />
-                                    </button>
-                                </div>
-                                <div className="absolute bottom-3 left-3">
-                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${product.stock > 20 ? 'bg-green-100 text-green-800' :
-                                            product.stock > 10 ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
-                                        }`}>
-                                        {product.stock} in stock
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="p-5">
-                                <div className="flex justify-between items-start mb-3">
-                                    <h4 className="font-bold text-lg text-gray-800 truncate">{product.title}</h4>
-                                    <span className="text-blue-600 font-bold text-lg">${product.price}</span>
-                                </div>
-                                <p className="text-gray-600 text-sm mb-4 line-clamp-2">{product.description}</p>
-                                <div className="flex justify-between items-center text-sm">
-                                    <div>
-                                        <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full">
-                                            {product.category}
-                                        </span>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-gray-500">Sales</p>
-                                        <p className="font-bold text-gray-800">{product.sales} units</p>
-                                    </div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-gray-100">
-                                    <p className="text-xs text-gray-500">Added: {product.createdAt}</p>
-                                </div>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-            )}
+            </div>
         </motion.div>
     );
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-teal-50/30">
-          
-
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Sidebar */}
                     <aside className="lg:w-64">
                         <div className="bg-white rounded-2xl shadow-lg p-4">
                             <nav className="space-y-2">
-                                <button
-                                    onClick={() => setActiveTab('dashboard')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === 'dashboard'
-                                        ? 'bg-gradient-to-r from-blue-500 to-teal-500 text-white shadow-md'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <FaChartLine />
-                                    <span className="font-medium">Dashboard</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('products')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === 'products'
-                                        ? 'bg-gradient-to-r from-blue-500 to-teal-500 text-white shadow-md'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <FaBox />
-                                    <span className="font-medium">Products</span>
-                                </button>
+                                {[
+                                    { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
+                                    { id: 'products', label: 'Products', icon: <FaBox /> },
+                                    { id: 'orders', label: 'Orders', icon: <FaShoppingCart /> },
+                                    { id: 'users', label: 'Users', icon: <FaUsers /> },
+                                    { id: 'settings', label: 'Settings', icon: <FaCog /> },
+                                ].map((item) => (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === item.id
+                                            ? 'bg-gradient-to-r from-blue-500 to-teal-500 text-white shadow-md'
+                                            : 'text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        {item.icon}
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                ))}
                             </nav>
                         </div>
                     </aside>
@@ -554,6 +513,9 @@ export default function Admin() {
                     <main className="flex-1">
                         {activeTab === 'dashboard' && renderDashboard()}
                         {activeTab === 'products' && renderProducts()}
+                        {activeTab === 'orders' && renderOrders()}
+                        {activeTab === 'users' && renderUsers()}
+                        {activeTab === 'settings' && renderSettings()}
                     </main>
                 </div>
             </div>
@@ -564,7 +526,7 @@ export default function Admin() {
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl"
                     >
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
@@ -573,7 +535,7 @@ export default function Admin() {
                                 </h3>
                                 <button
                                     onClick={() => setShowProductModal(false)}
-                                    className="text-gray-400 hover:text-gray-600 text-xl"
+                                    className="text-gray-400 hover:text-gray-600"
                                 >
                                     ✕
                                 </button>
@@ -591,7 +553,7 @@ export default function Admin() {
                                             value={productForm.title}
                                             onChange={handleInputChange}
                                             required
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="Enter product name"
                                         />
                                     </div>
@@ -605,7 +567,7 @@ export default function Admin() {
                                             value={productForm.category}
                                             onChange={handleInputChange}
                                             required
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
                                             <option value="">Select category</option>
                                             {categories.map(cat => (
@@ -626,7 +588,7 @@ export default function Admin() {
                                             required
                                             min="0"
                                             step="0.01"
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="0.00"
                                         />
                                     </div>
@@ -642,7 +604,7 @@ export default function Admin() {
                                             onChange={handleInputChange}
                                             required
                                             min="0"
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="0"
                                         />
                                     </div>
@@ -657,21 +619,9 @@ export default function Admin() {
                                             value={productForm.image}
                                             onChange={handleInputChange}
                                             required
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="https://example.com/image.jpg"
                                         />
-                                        {productForm.image && (
-                                            <div className="mt-2">
-                                                <img
-                                                    src={productForm.image}
-                                                    alt="Preview"
-                                                    className="w-32 h-32 object-cover rounded-lg border"
-                                                    onError={(e) => {
-                                                        e.target.style.display = 'none';
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
                                     </div>
 
                                     <div className="md:col-span-2">
@@ -684,7 +634,7 @@ export default function Admin() {
                                             onChange={handleInputChange}
                                             required
                                             rows="4"
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="Enter product description"
                                         />
                                     </div>
@@ -694,24 +644,19 @@ export default function Admin() {
                                     <button
                                         type="button"
                                         onClick={() => setShowProductModal(false)}
-                                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isLoading}
-                                        className={`px-6 py-3 rounded-lg transition-all duration-300 ${isLoading
+                                        className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
                                             ? 'bg-gray-400 cursor-not-allowed'
                                             : 'bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600'
                                             } text-white`}
                                     >
-                                        {isLoading ? (
-                                            <span className="flex items-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                {editingProduct ? 'Updating...' : 'Adding...'}
-                                            </span>
-                                        ) : editingProduct ? 'Update Product' : 'Add Product'}
+                                        {isLoading ? 'Saving...' : editingProduct ? 'Update Product' : 'Add Product'}
                                     </button>
                                 </div>
                             </form>
