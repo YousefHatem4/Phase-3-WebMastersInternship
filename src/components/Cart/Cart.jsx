@@ -1,94 +1,280 @@
+// Cart.jsx
 import React, { useEffect, useState } from 'react'
 import style from './Cart.module.css'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { supabase } from '../../supabaseClient'
+import toast from 'react-hot-toast'
+import { motion } from 'framer-motion'
 
 export default function Cart() {
-    const [isLoading, setIsLoading] = useState(false)
+    const [isLoading, setIsLoading] = useState(true)
+    const [cartItems, setCartItems] = useState([])
+    const [user, setUser] = useState(null)
+    const navigate = useNavigate()
 
-    // Static cart data
-    const staticCart = {
-        data: {
-            products: [
-                {
-                    product: {
-                        id: "1",
-                        title: "Running Shoes Pro",
-                        imageCover: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop"
-                    },
-                    price: 129.99,
-                    count: 1
-                },
-                {
-                    product: {
-                        id: "3",
-                        title: "Yoga Leggings Premium",
-                        imageCover: "https://images.unsplash.com/photo-1506629905607-e48b0e67d879?w=500&h=500&fit=crop"
-                    },
-                    price: 59.99,
-                    count: 2
-                }
-            ]
+    // Check user session
+    useEffect(() => {
+        checkUser()
+    }, [])
+
+    const checkUser = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user || null)
+
+        if (session?.user) {
+            fetchCartItems(session.user.id)
+        } else {
+            setIsLoading(false)
         }
-    };
+    }
 
-    const [cart, setCart] = useState(staticCart);
+    // Fetch cart items from database
+    const fetchCartItems = async (userId) => {
+        try {
+            setIsLoading(true)
+            const { data, error } = await supabase
+                .from('cart_items')
+                .select(`
+                    id,
+                    quantity,
+                    created_at,
+                    updated_at,
+                    products (
+                        id,
+                        title,
+                        description,
+                        price,
+                        image_url,
+                        stock,
+                        categories (
+                            name
+                        )
+                    )
+                `)
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+
+            if (error) throw error
+
+            // Transform data to match expected format
+            const formattedItems = data?.map(item => ({
+                id: item.id,
+                product: {
+                    id: item.products.id,
+                    title: item.products.title,
+                    image_url: item.products.image_url,
+                    category: item.products.categories?.name || 'Uncategorized',
+                    stock: item.products.stock
+                },
+                price: parseFloat(item.products.price),
+                quantity: item.quantity,
+                subtotal: parseFloat(item.products.price) * item.quantity
+            })) || []
+
+            setCartItems(formattedItems)
+        } catch (error) {
+            console.error('Error fetching cart items:', error)
+            toast.error('Failed to load cart items')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Update quantity
+    const updateQuantity = async (cartItemId, newQuantity) => {
+        try {
+            setIsLoading(true)
+
+            if (newQuantity < 1) {
+                // Remove item if quantity becomes 0
+                await removeItem(cartItemId)
+                return
+            }
+
+            const { error } = await supabase
+                .from('cart_items')
+                .update({ quantity: newQuantity })
+                .eq('id', cartItemId)
+
+            if (error) throw error
+
+            // Update local state
+            setCartItems(prev => prev.map(item =>
+                item.id === cartItemId
+                    ? {
+                        ...item,
+                        quantity: newQuantity,
+                        subtotal: item.price * newQuantity
+                    }
+                    : item
+            ))
+
+            toast.success('Quantity updated')
+        } catch (error) {
+            console.error('Error updating quantity:', error)
+            toast.error('Failed to update quantity')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Remove item from cart
+    const removeItem = async (cartItemId) => {
+        try {
+            setIsLoading(true)
+
+            const { error } = await supabase
+                .from('cart_items')
+                .delete()
+                .eq('id', cartItemId)
+
+            if (error) throw error
+
+            // Update local state
+            setCartItems(prev => prev.filter(item => item.id !== cartItemId))
+
+            toast.success('Item removed from cart')
+        } catch (error) {
+            console.error('Error removing item:', error)
+            toast.error('Failed to remove item')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Clear entire cart
+    const handleClearCart = async () => {
+        if (!user) {
+            toast.error('Please login to manage cart')
+            navigate('/login')
+            return
+        }
+
+        if (!window.confirm('Are you sure you want to clear your entire cart?')) {
+            return
+        }
+
+        try {
+            setIsLoading(true)
+
+            const { error } = await supabase
+                .from('cart_items')
+                .delete()
+                .eq('user_id', user.id)
+
+            if (error) throw error
+
+            setCartItems([])
+            toast.success('Cart cleared successfully')
+        } catch (error) {
+            console.error('Error clearing cart:', error)
+            toast.error('Failed to clear cart')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Calculate totals
+    const subtotal = cartItems.reduce((total, item) => total + item.subtotal, 0)
+    const shipping = subtotal > 0 ? 15 : 0
+    const total = subtotal + shipping
+    const hasItems = cartItems.length > 0
 
     useEffect(() => {
         document.title = 'Cart - Sportswear Store'
     }, [])
 
-    // Calculate cart totals
-    const subtotal = cart?.data?.products?.reduce((total, item) => total + (item.price * item.count), 0) || 0
-    const shipping = subtotal > 0 ? 15 : 0
-    const total = subtotal + shipping
-    const hasItems = cart && cart.data.products.length > 0
+    // Handle checkout
+    const handleCheckout = () => {
+        if (!user) {
+            toast.error('Please login to checkout')
+            navigate('/login')
+            return
+        }
 
-    const updateQuantity = async (productId, newCount) => {
-        setIsLoading(true)
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+        if (cartItems.length === 0) {
+            toast.error('Your cart is empty')
+            return
+        }
 
-        setCart(prevCart => ({
-            ...prevCart,
-            data: {
-                ...prevCart.data,
-                products: prevCart.data.products.map(item =>
-                    item.product.id === productId
-                        ? { ...item, count: newCount }
-                        : item
-                )
-            }
-        }));
-        setIsLoading(false)
+        // Here you would integrate with your payment system
+        toast.success('Proceeding to checkout...')
+        // navigate('/checkout')
     }
 
-    const removeItem = async (productId) => {
-        setIsLoading(true)
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+    // Move item to wishlist
+    const moveToWishlist = async (productId) => {
+        if (!user) {
+            toast.error('Please login to use wishlist')
+            navigate('/login')
+            return
+        }
 
-        setCart(prevCart => ({
-            ...prevCart,
-            data: {
-                ...prevCart.data,
-                products: prevCart.data.products.filter(item => item.product.id !== productId)
+        try {
+            // Check if already in wishlist
+            const { data: existingItem, error: checkError } = await supabase
+                .from('wishlist_items')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('product_id', productId)
+                .single()
+
+            if (checkError && checkError.code !== 'PGRST116') {
+                throw checkError
             }
-        }));
-        setIsLoading(false)
+
+            if (!existingItem) {
+                // Add to wishlist
+                const { error: insertError } = await supabase
+                    .from('wishlist_items')
+                    .insert({
+                        user_id: user.id,
+                        product_id: productId
+                    })
+
+                if (insertError) throw insertError
+                toast.success('Item moved to wishlist')
+            } else {
+                toast.info('Item already in wishlist')
+            }
+        } catch (error) {
+            console.error('Error moving to wishlist:', error)
+            toast.error('Failed to move to wishlist')
+        }
     }
 
-    const handleClearCart = async () => {
-        setIsLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        setCart({
-            data: {
-                products: []
+    // Handle quantity change
+    const handleQuantityChange = (cartItemId, change) => {
+        const item = cartItems.find(item => item.id === cartItemId)
+        if (item) {
+            const newQuantity = item.quantity + change
+            if (newQuantity > 0) {
+                updateQuantity(cartItemId, newQuantity)
+            } else {
+                removeItem(cartItemId)
             }
-        });
-        setIsLoading(false);
-    };
+        }
+    }
+
+    if (!user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-gray-400 mb-4">
+                        <i className="fas fa-shopping-cart text-6xl"></i>
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-3">Please Sign In</h3>
+                    <p className="text-gray-500 mb-6">You need to be signed in to view your cart</p>
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium rounded-lg hover:from-blue-600 hover:to-teal-600 transition"
+                    >
+                        Sign In
+                    </button>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <section className="min-h-screen bg-gradient-to-b from-blue-50/30 to-teal-50/30 py-8 px-4 sm:px-6 lg:px-20">
@@ -97,17 +283,21 @@ export default function Cart() {
                 <div className="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-xl flex items-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
-                        <span>Updating cart...</span>
+                        <span>Loading cart...</span>
                     </div>
                 </div>
             )}
 
             {/* Title Section */}
             <div className="max-w-6xl mx-auto">
-                <div className="flex items-center gap-3 mb-2">
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-3 mb-2"
+                >
                     <div className="bg-gradient-to-r from-blue-500 to-teal-400 w-5 h-10 rounded-md"></div>
                     <h1 className="bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-semibold text-2xl">Shopping Cart</h1>
-                </div>
+                </motion.div>
                 <p className="text-gray-600 mb-8 ml-8">Review your sportswear items and proceed to checkout</p>
 
                 {/* Cart Container */}
@@ -124,26 +314,41 @@ export default function Cart() {
 
                         {/* Cart Items */}
                         {hasItems ? (
-                            <div className="space-y-4">
-                                {cart.data.products.map((item) => (
-                                    <div key={item.product.id} className="bg-white rounded-xl shadow-sm p-4 md:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                            <motion.div
+                                initial="hidden"
+                                animate="show"
+                                variants={{
+                                    hidden: { opacity: 0 },
+                                    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+                                }}
+                                className="space-y-4"
+                            >
+                                {cartItems.map((item) => (
+                                    <motion.div
+                                        key={item.id}
+                                        variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
+                                        className="bg-white rounded-xl shadow-sm p-4 md:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-center"
+                                    >
                                         {/* Product Info */}
                                         <div className="md:col-span-5 flex items-center gap-4">
                                             <img
-                                                src={item.product.imageCover}
-                                                className="w-20 h-20 object-contain rounded-lg border border-gray-100"
+                                                src={item.product.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
+                                                className="w-20 h-20 object-cover rounded-lg border border-gray-100"
                                                 alt={item.product.title}
+                                                onError={(e) => {
+                                                    e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop';
+                                                }}
                                             />
                                             <div>
                                                 <h3 className="font-medium text-gray-900 line-clamp-2">{item.product.title}</h3>
-                                                <p className="text-gray-500 text-sm mt-1">SKU: {item.product.id.slice(0, 8)}</p>
+                                                <p className="text-gray-500 text-sm mt-1">{item.product.category}</p>
                                             </div>
                                         </div>
 
                                         {/* Price */}
                                         <div className="md:col-span-2 flex justify-start md:justify-center">
                                             <span className="text-gray-900 font-medium md:hidden mr-2">Price: </span>
-                                            <p className="text-gray-700 font-semibold">${item.price}</p>
+                                            <p className="text-gray-700 font-semibold">${item.price.toFixed(2)}</p>
                                         </div>
 
                                         {/* Quantity Selector */}
@@ -151,47 +356,59 @@ export default function Cart() {
                                             <span className="text-gray-900 font-medium md:hidden mr-2">Qty: </span>
                                             <div className="flex items-center border border-gray-200 rounded-lg w-28 h-10 justify-between">
                                                 <button
-                                                    onClick={() => item.count > 1 ? updateQuantity(item.product.id, item.count - 1) : removeItem(item.product.id)}
-                                                    className="px-3 text-gray-500 cursor-pointer hover:text-blue-500 transition h-full flex items-center"
+                                                    onClick={() => handleQuantityChange(item.id, -1)}
                                                     disabled={isLoading}
+                                                    className="px-3 text-gray-500 cursor-pointer hover:text-blue-500 transition h-full flex items-center"
                                                 >
                                                     -
                                                 </button>
-                                                <span className="font-medium text-gray-800">{item.count}</span>
+                                                <span className="font-medium text-gray-800">{item.quantity}</span>
                                                 <button
-                                                    onClick={() => updateQuantity(item.product.id, item.count + 1)}
-                                                    className="px-3 cursor-pointer text-gray-500 hover:text-blue-500 transition h-full flex items-center"
-                                                    disabled={isLoading}
+                                                    onClick={() => handleQuantityChange(item.id, 1)}
+                                                    disabled={isLoading || item.product.stock <= item.quantity}
+                                                    className={`px-3 cursor-pointer transition h-full flex items-center ${item.product.stock <= item.quantity
+                                                            ? 'text-gray-300 cursor-not-allowed'
+                                                            : 'text-gray-500 hover:text-blue-500'
+                                                        }`}
                                                 >
                                                     +
                                                 </button>
                                             </div>
                                         </div>
 
-                                        {/* Subtotal */}
+                                        {/* Subtotal and Actions */}
                                         <div className="md:col-span-2 flex items-center justify-between">
                                             <div>
                                                 <span className="text-gray-900 font-medium md:hidden">Subtotal: </span>
-                                                <p className="text-gray-900 font-semibold">${(item.price * item.count).toFixed(2)}</p>
+                                                <p className="text-gray-900 font-semibold">${item.subtotal.toFixed(2)}</p>
                                             </div>
-                                            <button
-                                                onClick={() => removeItem(item.product.id)}
-                                                className="text-gray-400 cursor-pointer hover:text-blue-500 transition p-2"
-                                                disabled={isLoading}
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => moveToWishlist(item.product.id)}
+                                                    className="text-gray-400 cursor-pointer hover:text-pink-500 transition p-2"
+                                                    disabled={isLoading}
+                                                    title="Move to wishlist"
+                                                >
+                                                    <i className="fas fa-heart"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => removeItem(item.id)}
+                                                    className="text-gray-400 cursor-pointer hover:text-blue-500 transition p-2"
+                                                    disabled={isLoading}
+                                                    title="Remove item"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 ))}
-                            </div>
+                            </motion.div>
                         ) : (
                             <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
+                                <div className="text-gray-300 mb-4">
+                                    <i className="fas fa-shopping-cart text-6xl"></i>
+                                </div>
                                 <h3 className="text-xl font-medium text-gray-700 mb-2">Your cart is empty</h3>
                                 <p className="text-gray-500 mb-6">Looks like you haven't added any sportswear items to your cart yet.</p>
                                 <Link
@@ -207,7 +424,11 @@ export default function Cart() {
                     {/* Order Summary */}
                     {hasItems && (
                         <div className="lg:w-1/3">
-                            <div className="bg-white rounded-xl shadow-sm p-6 sticky top-6">
+                            <motion.div
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="bg-white rounded-xl shadow-sm p-6 sticky top-6"
+                            >
                                 <h2 className="text-xl font-semibold text-gray-900 mb-6 pb-4 border-b">Order Summary</h2>
 
                                 <div className="space-y-4 mb-6">
@@ -226,12 +447,12 @@ export default function Cart() {
                                 </div>
 
                                 <div className="space-y-3">
-                                    <Link
-                                        to="/checkout"
+                                    <button
+                                        onClick={handleCheckout}
                                         className="block w-full bg-gradient-to-r from-blue-500 to-teal-500 text-white text-center font-semibold py-3 rounded-lg shadow-md hover:from-blue-600 hover:to-teal-600 transition"
                                     >
                                         Proceed to Checkout
-                                    </Link>
+                                    </button>
 
                                     <button
                                         onClick={handleClearCart}
@@ -247,7 +468,7 @@ export default function Cart() {
                                         Continue Shopping
                                     </Link>
                                 </div>
-                            </div>
+                            </motion.div>
                         </div>
                     )}
                 </div>

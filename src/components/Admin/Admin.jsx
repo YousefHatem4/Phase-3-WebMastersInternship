@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
     FaBox, FaUsers, FaShoppingCart, FaChartLine, FaCog,
     FaSignOutAlt, FaPlus, FaEdit, FaTrash, FaEye,
-    FaSpinner, FaCheck, FaTimes
+    FaSpinner, FaCheck, FaTimes, FaTags, FaTag
 } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -13,31 +13,42 @@ import { useNavigate } from 'react-router-dom';
 export default function Admin() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
     const [orders, setOrders] = useState([]);
     const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
     const [stats, setStats] = useState({
         totalProducts: 0,
+        totalCategories: 0,
         totalOrders: 0,
         totalUsers: 0,
         totalRevenue: 0,
     });
 
-    // Form states
+    // Form states for products
     const [productForm, setProductForm] = useState({
         title: '',
         description: '',
         price: '',
-        category: '',
+        category_id: '',
         stock: '',
         image_url: ''
     });
     const [editingProduct, setEditingProduct] = useState(null);
     const [showProductModal, setShowProductModal] = useState(false);
 
+    // Form states for categories
+    const [categoryForm, setCategoryForm] = useState({
+        name: '',
+        description: '',
+        image_url: '',
+        is_active: true
+    });
+    const [editingCategory, setEditingCategory] = useState(null);
+    const [showCategoryModal, setShowCategoryModal] = useState(false);
+
     const navigate = useNavigate();
-    const categories = ['Shoes', 'Clothing', 'Accessories', 'Equipment'];
 
     // Check admin authentication
     useEffect(() => {
@@ -55,16 +66,14 @@ export default function Admin() {
                 return;
             }
 
-            // SIMPLIFIED: Just check if user exists in admin_roles
             const { data: adminRole, error } = await supabase
                 .from('admin_roles')
                 .select('*')
                 .eq('id', session.user.id)
-                .maybeSingle();  // Changed from .single() to .maybeSingle()
+                .maybeSingle();
 
             if (error) {
                 console.error('Admin check error:', error);
-                // Don't redirect on error, just log it
             }
 
             if (!adminRole) {
@@ -73,31 +82,31 @@ export default function Admin() {
                 return;
             }
 
-            // If we get here, user is admin
             console.log('User is admin:', adminRole);
 
         } catch (error) {
             console.error('Admin access check error:', error);
-            // Don't redirect on error
         }
     };
+
     const loadInitialData = async () => {
         try {
             setIsInitializing(true);
 
-            // Load products, orders, and users in parallel
-            const [productsData, ordersData, usersData] = await Promise.all([
+            // Load all data in parallel
+            const [productsData, categoriesData, ordersData, usersData] = await Promise.all([
                 fetchProducts(),
+                fetchCategories(),
                 fetchOrders(),
                 fetchUsers()
             ]);
 
             setProducts(productsData);
+            setCategories(categoriesData);
             setOrders(ordersData);
             setUsers(usersData);
 
-            // Calculate stats
-            calculateStats(productsData, ordersData, usersData);
+            calculateStats(productsData, categoriesData, ordersData, usersData);
 
         } catch (error) {
             console.error('Error loading initial data:', error);
@@ -111,7 +120,13 @@ export default function Admin() {
         try {
             const { data, error } = await supabase
                 .from('products')
-                .select('*')
+                .select(`
+                    *,
+                    categories (
+                        id,
+                        name
+                    )
+                `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -119,6 +134,22 @@ export default function Admin() {
         } catch (error) {
             console.error('Error fetching products:', error);
             toast.error('Failed to load products');
+            return [];
+        }
+    };
+
+    const fetchCategories = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('*')
+                .order('name');
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            toast.error('Failed to load categories');
             return [];
         }
     };
@@ -149,50 +180,33 @@ export default function Admin() {
 
     const fetchUsers = async () => {
         try {
-            console.log('Fetching users...');
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
-                .limit(10);  // Add limit for testing
+                .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('Supabase error:', error);
-                throw error;
-            }
-
-            console.log('Users fetched:', data?.length);
+            if (error) throw error;
             return data || [];
         } catch (error) {
             console.error('Error fetching users:', error);
-            toast.error('Failed to load users: ' + error.message);
+            toast.error('Failed to load users');
             return [];
         }
     };
 
-    const calculateStats = (productsData, ordersData, usersData) => {
+    const calculateStats = (productsData, categoriesData, ordersData, usersData) => {
         const totalRevenue = ordersData.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
 
         setStats({
             totalProducts: productsData.length,
+            totalCategories: categoriesData.length,
             totalOrders: ordersData.length,
             totalUsers: usersData.length,
             totalRevenue: totalRevenue,
         });
     };
 
-    const handleLogout = async () => {
-        try {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
-
-            toast.success('Logged out successfully');
-            navigate('/login');
-        } catch (error) {
-            console.error('Logout error:', error);
-            toast.error('Failed to logout');
-        }
-    };
-
+    // PRODUCT FUNCTIONS
     const handleProductSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -204,61 +218,53 @@ export default function Admin() {
                 title: productForm.title,
                 description: productForm.description,
                 price: parseFloat(productForm.price),
-                category: productForm.category,
+                category_id: productForm.category_id || null,
                 stock: parseInt(productForm.stock),
                 image_url: productForm.image_url,
                 updated_at: new Date().toISOString(),
             };
 
             if (editingProduct) {
-                // Update existing product
                 const { data, error } = await supabase
                     .from('products')
                     .update(productData)
                     .eq('id', editingProduct.id)
-                    .select()
+                    .select(`
+                        *,
+                        categories (
+                            id,
+                            name
+                        )
+                    `)
                     .single();
 
                 if (error) throw error;
 
-                // Update local state
                 setProducts(products.map(p => p.id === editingProduct.id ? data : p));
                 toast.success('Product updated successfully');
             } else {
-                // Add new product
                 productData.created_by = session.user.id;
 
                 const { data, error } = await supabase
                     .from('products')
                     .insert([productData])
-                    .select()
+                    .select(`
+                        *,
+                        categories (
+                            id,
+                            name
+                        )
+                    `)
                     .single();
 
                 if (error) throw error;
 
-                // Update local state
                 setProducts([data, ...products]);
                 toast.success('Product added successfully');
             }
 
-            // Reset form and close modal
-            setProductForm({
-                title: '',
-                description: '',
-                price: '',
-                category: '',
-                stock: '',
-                image_url: ''
-            });
-            setEditingProduct(null);
+            resetProductForm();
             setShowProductModal(false);
-
-            // Update stats
-            calculateStats(
-                editingProduct ? products.map(p => p.id === editingProduct.id ? { ...p, ...productData } : p) : [productData, ...products],
-                orders,
-                users
-            );
 
         } catch (error) {
             console.error('Error saving product:', error);
@@ -274,7 +280,7 @@ export default function Admin() {
             title: product.title,
             description: product.description,
             price: product.price,
-            category: product.category,
+            category_id: product.category_id || '',
             stock: product.stock,
             image_url: product.image_url
         });
@@ -282,9 +288,7 @@ export default function Admin() {
     };
 
     const handleDeleteProduct = async (productId) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) {
-            return;
-        }
+        if (!window.confirm('Are you sure you want to delete this product?')) return;
 
         try {
             const { error } = await supabase
@@ -294,20 +298,138 @@ export default function Admin() {
 
             if (error) throw error;
 
-            // Update local state
             setProducts(products.filter(p => p.id !== productId));
-
-            // Update stats
-            calculateStats(
-                products.filter(p => p.id !== productId),
-                orders,
-                users
-            );
-
+            calculateStats(products.filter(p => p.id !== productId), categories, orders, users);
             toast.success('Product deleted successfully');
         } catch (error) {
             console.error('Error deleting product:', error);
             toast.error('Failed to delete product');
+        }
+    };
+
+    // CATEGORY FUNCTIONS
+    const handleCategorySubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            const categoryData = {
+                name: categoryForm.name,
+                description: categoryForm.description,
+                image_url: categoryForm.image_url,
+                is_active: categoryForm.is_active,
+                updated_at: new Date().toISOString(),
+            };
+
+            if (editingCategory) {
+                const { data, error } = await supabase
+                    .from('categories')
+                    .update(categoryData)
+                    .eq('id', editingCategory.id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                setCategories(categories.map(c => c.id === editingCategory.id ? data : c));
+                toast.success('Category updated successfully');
+            } else {
+                categoryData.created_by = session.user.id;
+
+                const { data, error } = await supabase
+                    .from('categories')
+                    .insert([categoryData])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                setCategories([data, ...categories]);
+                toast.success('Category added successfully');
+            }
+
+            resetCategoryForm();
+            setShowCategoryModal(false);
+
+        } catch (error) {
+            console.error('Error saving category:', error);
+            toast.error(error.message || 'Failed to save category');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEditCategory = (category) => {
+        setEditingCategory(category);
+        setCategoryForm({
+            name: category.name,
+            description: category.description || '',
+            image_url: category.image_url || '',
+            is_active: category.is_active
+        });
+        setShowCategoryModal(true);
+    };
+
+    const handleDeleteCategory = async (categoryId) => {
+        if (!window.confirm('Are you sure you want to delete this category? Products using this category will have their category set to null.')) return;
+
+        try {
+            const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('id', categoryId);
+
+            if (error) throw error;
+
+            setCategories(categories.filter(c => c.id !== categoryId));
+
+            // Update products that were using this category
+            setProducts(products.map(p =>
+                p.category_id === categoryId ? { ...p, category_id: null, categories: null } : p
+            ));
+
+            calculateStats(products, categories.filter(c => c.id !== categoryId), orders, users);
+            toast.success('Category deleted successfully');
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            toast.error('Failed to delete category');
+        }
+    };
+
+    const resetProductForm = () => {
+        setProductForm({
+            title: '',
+            description: '',
+            price: '',
+            category_id: '',
+            stock: '',
+            image_url: ''
+        });
+        setEditingProduct(null);
+    };
+
+    const resetCategoryForm = () => {
+        setCategoryForm({
+            name: '',
+            description: '',
+            image_url: '',
+            is_active: true
+        });
+        setEditingCategory(null);
+    };
+
+    const handleLogout = async () => {
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+
+            toast.success('Logged out successfully');
+            navigate('/login');
+        } catch (error) {
+            console.error('Logout error:', error);
+            toast.error('Failed to logout');
         }
     };
 
@@ -323,7 +445,6 @@ export default function Admin() {
 
             if (error) throw error;
 
-            // Update local state
             setOrders(orders.map(order =>
                 order.id === orderId ? { ...order, status: newStatus } : order
             ));
@@ -335,14 +456,6 @@ export default function Admin() {
         }
     };
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setProductForm(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -351,6 +464,7 @@ export default function Admin() {
         });
     };
 
+    // RENDER FUNCTIONS
     const renderDashboard = () => (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -359,11 +473,12 @@ export default function Admin() {
             className="space-y-6"
         >
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 {[
                     { title: 'Total Products', value: stats.totalProducts, icon: <FaBox />, color: 'bg-gradient-to-r from-blue-500 to-blue-600' },
+                    { title: 'Categories', value: stats.totalCategories, icon: <FaTags />, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
                     { title: 'Total Orders', value: stats.totalOrders, icon: <FaShoppingCart />, color: 'bg-gradient-to-r from-green-500 to-green-600' },
-                    { title: 'Total Users', value: stats.totalUsers, icon: <FaUsers />, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
+                    { title: 'Total Users', value: stats.totalUsers, icon: <FaUsers />, color: 'bg-gradient-to-r from-pink-500 to-pink-600' },
                     { title: 'Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, icon: <FaChartLine />, color: 'bg-gradient-to-r from-orange-500 to-orange-600' }
                 ].map((stat, index) => (
                     <motion.div
@@ -432,20 +547,11 @@ export default function Admin() {
             transition={{ duration: 0.5 }}
             className="space-y-6"
         >
-            {/* Header with Add Button */}
             <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-800">Product Management</h3>
                 <button
                     onClick={() => {
-                        setEditingProduct(null);
-                        setProductForm({
-                            title: '',
-                            description: '',
-                            price: '',
-                            category: '',
-                            stock: '',
-                            image_url: ''
-                        });
+                        resetProductForm();
                         setShowProductModal(true);
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all duration-300"
@@ -454,7 +560,6 @@ export default function Admin() {
                 </button>
             </div>
 
-            {/* Products Grid */}
             {isInitializing ? (
                 <div className="flex justify-center items-center h-64">
                     <FaSpinner className="animate-spin text-4xl text-blue-500" />
@@ -499,13 +604,89 @@ export default function Admin() {
                                         <p className="text-sm text-gray-500">Stock: {product.stock}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm text-gray-500">{product.category}</p>
+                                        <p className="text-sm text-gray-500">{product.categories?.name || 'Uncategorized'}</p>
                                         <p className="text-xs text-gray-400">Sales: {product.sales || 0}</p>
                                     </div>
                                 </div>
                                 <p className="text-xs text-gray-400 mt-2">
                                     Created: {formatDate(product.created_at)}
                                 </p>
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+        </motion.div>
+    );
+
+    const renderCategories = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">Category Management</h3>
+                <button
+                    onClick={() => {
+                        resetCategoryForm();
+                        setShowCategoryModal(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-300"
+                >
+                    <FaTag /> Add Category
+                </button>
+            </div>
+
+            {isInitializing ? (
+                <div className="flex justify-center items-center h-64">
+                    <FaSpinner className="animate-spin text-4xl text-blue-500" />
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {categories.map((category) => (
+                        <motion.div
+                            key={category.id}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.3 }}
+                            className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300"
+                        >
+                            <div className="relative h-48 overflow-hidden">
+                                <img
+                                    src={category.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop'}
+                                    alt={category.name}
+                                    className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                                />
+                                <div className="absolute top-3 right-3 flex gap-2">
+                                    <button
+                                        onClick={() => handleEditCategory(category)}
+                                        className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                                    >
+                                        <FaEdit className="text-blue-500" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteCategory(category.id)}
+                                        className="p-2 bg-white rounded-full shadow-md hover:shadow-lg transition-shadow"
+                                    >
+                                        <FaTrash className="text-red-500" />
+                                    </button>
+                                </div>
+                                <div className="absolute bottom-3 left-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${category.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        {category.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="p-5">
+                                <h4 className="font-bold text-lg text-gray-800 truncate">{category.name}</h4>
+                                <p className="text-gray-600 text-sm mt-1 line-clamp-2">{category.description}</p>
+                                <div className="mt-4">
+                                    <p className="text-xs text-gray-400">
+                                        Created: {formatDate(category.created_at)}
+                                    </p>
+                                </div>
                             </div>
                         </motion.div>
                     ))}
@@ -571,9 +752,6 @@ export default function Admin() {
                                                 >
                                                     <FaEye />
                                                 </button>
-                                                <button className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors">
-                                                    <FaEdit />
-                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -622,14 +800,6 @@ export default function Admin() {
                                     <p className="font-medium">{user.phone || 'Not set'}</p>
                                 </div>
                             </div>
-                            <div className="mt-4 flex gap-2">
-                                <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
-                                    View Profile
-                                </button>
-                                <button className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-                                    Block User
-                                </button>
-                            </div>
                         </div>
                     ))}
                 </div>
@@ -637,7 +807,37 @@ export default function Admin() {
         </motion.div>
     );
 
-  
+    const renderSettings = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <h3 className="text-xl font-bold text-gray-800">Admin Settings</h3>
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="space-y-6">
+                    <div>
+                        <h4 className="font-semibold text-gray-700 mb-3">Admin Actions</h4>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={loadInitialData}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                            >
+                                <FaSpinner className={isInitializing ? 'animate-spin' : ''} /> Refresh Data
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                                <FaSignOutAlt /> Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </motion.div>
+    );
 
     if (isInitializing && activeTab === 'dashboard') {
         return (
@@ -665,9 +865,10 @@ export default function Admin() {
                                 {[
                                     { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
                                     { id: 'products', label: 'Products', icon: <FaBox /> },
+                                    { id: 'categories', label: 'Categories', icon: <FaTags /> },
                                     { id: 'orders', label: 'Orders', icon: <FaShoppingCart /> },
                                     { id: 'users', label: 'Users', icon: <FaUsers /> },
-                                  
+                                    { id: 'settings', label: 'Settings', icon: <FaCog /> },
                                 ].map((item) => (
                                     <button
                                         key={item.id}
@@ -689,9 +890,10 @@ export default function Admin() {
                     <main className="flex-1">
                         {activeTab === 'dashboard' && renderDashboard()}
                         {activeTab === 'products' && renderProducts()}
+                        {activeTab === 'categories' && renderCategories()}
                         {activeTab === 'orders' && renderOrders()}
                         {activeTab === 'users' && renderUsers()}
-                       
+                        {activeTab === 'settings' && renderSettings()}
                     </main>
                 </div>
             </div>
@@ -702,7 +904,7 @@ export default function Admin() {
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl"
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
                     >
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
@@ -710,7 +912,10 @@ export default function Admin() {
                                     {editingProduct ? 'Edit Product' : 'Add New Product'}
                                 </h3>
                                 <button
-                                    onClick={() => setShowProductModal(false)}
+                                    onClick={() => {
+                                        setShowProductModal(false);
+                                        resetProductForm();
+                                    }}
                                     className="text-gray-400 hover:text-gray-600"
                                 >
                                     ✕
@@ -727,7 +932,7 @@ export default function Admin() {
                                             type="text"
                                             name="title"
                                             value={productForm.title}
-                                            onChange={handleInputChange}
+                                            onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
                                             required
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="Enter product name"
@@ -736,18 +941,17 @@ export default function Admin() {
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Category *
+                                            Category
                                         </label>
                                         <select
-                                            name="category"
-                                            value={productForm.category}
-                                            onChange={handleInputChange}
-                                            required
+                                            name="category_id"
+                                            value={productForm.category_id}
+                                            onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
                                             <option value="">Select category</option>
                                             {categories.map(cat => (
-                                                <option key={cat} value={cat}>{cat}</option>
+                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -760,7 +964,7 @@ export default function Admin() {
                                             type="number"
                                             name="price"
                                             value={productForm.price}
-                                            onChange={handleInputChange}
+                                            onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                                             required
                                             min="0"
                                             step="0.01"
@@ -777,7 +981,7 @@ export default function Admin() {
                                             type="number"
                                             name="stock"
                                             value={productForm.stock}
-                                            onChange={handleInputChange}
+                                            onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
                                             required
                                             min="0"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -793,7 +997,7 @@ export default function Admin() {
                                             type="url"
                                             name="image_url"
                                             value={productForm.image_url}
-                                            onChange={handleInputChange}
+                                            onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
                                             required
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             placeholder="https://example.com/image.jpg"
@@ -807,7 +1011,7 @@ export default function Admin() {
                                         <textarea
                                             name="description"
                                             value={productForm.description}
-                                            onChange={handleInputChange}
+                                            onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                                             required
                                             rows="4"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -819,7 +1023,10 @@ export default function Admin() {
                                 <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
                                     <button
                                         type="button"
-                                        onClick={() => setShowProductModal(false)}
+                                        onClick={() => {
+                                            setShowProductModal(false);
+                                            resetProductForm();
+                                        }}
                                         className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                                     >
                                         Cancel
@@ -846,6 +1053,133 @@ export default function Admin() {
                                             <>
                                                 <FaPlus />
                                                 Add Product
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Category Modal */}
+            {showCategoryModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800">
+                                    {editingCategory ? 'Edit Category' : 'Add New Category'}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowCategoryModal(false);
+                                        resetCategoryForm();
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCategorySubmit} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Category Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="name"
+                                            value={categoryForm.name}
+                                            onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                                            required
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter category name"
+                                        />
+                                    </div>
+
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Description
+                                        </label>
+                                        <textarea
+                                            name="description"
+                                            value={categoryForm.description}
+                                            onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                                            rows="3"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter category description"
+                                        />
+                                    </div>
+
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Image URL *
+                                        </label>
+                                        <input
+                                            type="url"
+                                            name="image_url"
+                                            value={categoryForm.image_url}
+                                            onChange={(e) => setCategoryForm({ ...categoryForm, image_url: e.target.value })}
+                                            required
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="https://example.com/category-image.jpg"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 mb-2">
+                                            <input
+                                                type="checkbox"
+                                                name="is_active"
+                                                checked={categoryForm.is_active}
+                                                onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+                                                className="rounded text-blue-500"
+                                            />
+                                            <span className="text-sm font-medium text-gray-700">Active Category</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCategoryModal(false);
+                                            resetCategoryForm();
+                                        }}
+                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading}
+                                        className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
+                                            ? 'bg-gray-400 cursor-not-allowed'
+                                            : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                                            } text-white flex items-center gap-2`}
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <FaSpinner className="animate-spin" />
+                                                Saving...
+                                            </>
+                                        ) : editingCategory ? (
+                                            <>
+                                                <FaCheck />
+                                                Update Category
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FaTag />
+                                                Add Category
                                             </>
                                         )}
                                     </button>

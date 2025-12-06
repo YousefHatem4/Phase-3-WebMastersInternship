@@ -1,154 +1,303 @@
+// Home.jsx
 import React, { useEffect, useState } from 'react';
 import style from './Home.module.css';
 import HomeCategory from '../HomeCategory/HomeCategory';
 import HomeSlider from '../HomeSlider/HomeSlider';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { supabase } from '../../supabaseClient';
 import Loading from '../Loading/Loading';
+import { motion } from 'framer-motion';
 
 export default function Home() {
-    // Static sportswear products data
-    const staticProducts = [
-        {
-            _id: "1",
-            title: "Running Shoes Pro",
-            imageCover: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop",
-            category: { name: "Running Shoes" },
-            price: 129.99,
-            ratingsAverage: 4.8
-        },
-        {
-            _id: "2",
-            title: "Basketball Jersey Elite",
-            imageCover: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=500&h=500&fit=crop",
-            category: { name: "Basketball" },
-            price: 79.99,
-            ratingsAverage: 4.6
-        },
-        {
-            _id: "3",
-            title: "Yoga Leggings Premium",
-            imageCover: "https://images.unsplash.com/photo-1506629905607-e48b0e67d879?w=500&h=500&fit=crop",
-            category: { name: "Yoga Wear" },
-            price: 59.99,
-            ratingsAverage: 4.9
-        },
-        {
-            _id: "4",
-            title: "Training Shorts",
-            imageCover: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=500&h=500&fit=crop",
-            category: { name: "Training" },
-            price: 45.99,
-            ratingsAverage: 4.5
-        },
-        {
-            _id: "5",
-            title: "Football Cleats Pro",
-            imageCover: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=500&h=500&fit=crop",
-            category: { name: "Football" },
-            price: 149.99,
-            ratingsAverage: 4.7
-        },
-        {
-            _id: "6",
-            title: "Tennis Skirt Performance",
-            imageCover: "https://images.unsplash.com/photo-1585156930249-f8c59c3e046f?w=500&h=500&fit=crop",
-            category: { name: "Tennis" },
-            price: 65.99,
-            ratingsAverage: 4.8
-        },
-        {
-            _id: "7",
-            title: "Hoodie Sportswear",
-            imageCover: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=500&h=500&fit=crop",
-            category: { name: "Casual Wear" },
-            price: 89.99,
-            ratingsAverage: 4.4
-        },
-        {
-            _id: "8",
-            title: "Cycling Jersey Aero",
-            imageCover: "https://images.unsplash.com/photo-1586351012965-8616a6d382aa?w=500&h=500&fit=crop",
-            category: { name: "Cycling" },
-            price: 95.99,
-            ratingsAverage: 4.6
-        }
-    ];
-
-    // Static categories data
-    const staticCategories = [
-        {
-            _id: "1",
-            name: "Running Shoes",
-            image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop"
-        },
-        {
-            _id: "2",
-            name: "Basketball",
-            image: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=200&h=200&fit=crop"
-        },
-        {
-            _id: "3",
-            name: "Yoga Wear",
-            image: "https://images.unsplash.com/photo-1506629905607-e48b0e67d879?w=200&h=200&fit=crop"
-        },
-        {
-            _id: "4",
-            name: "Training Gear",
-            image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=200&h=200&fit=crop"
-        },
-        {
-            _id: "5",
-            name: "Football",
-            image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=200&h=200&fit=crop"
-        },
-        {
-            _id: "6",
-            name: "Tennis",
-            image: "https://images.unsplash.com/photo-1585156930249-f8c59c3e046f?w=200&h=200&fit=crop"
-        }
-    ];
-
-    const [addedItems, setAddedItems] = useState([]);
-    const [wishItems, setWishItems] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [cartItems, setCartItems] = useState([]);
+    const [wishlistItems, setWishlistItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(null);
     const navigate = useNavigate();
 
-    const handleAddToCart = (productId) => {
-        let token = localStorage.getItem('userToken');
-
-        if (!token) {
-            toast.error("You must sign in first to add to cart");
-            navigate("/login");
-            return;
-        }
-        setAddedItems((prev) => [...prev, productId]);
-        toast.success("Product added to cart!");
-    }
-
-    const handleWishlistAction = (productId) => {
-        let token = localStorage.getItem('userToken');
-
-        if (!token) {
-            toast.error("You must sign in first to add to wishlist");
-            navigate("/login");
-            return;
-        }
-
-        if (wishItems.includes(productId)) {
-            setWishItems(wishItems.filter(id => id !== productId));
-            toast.success("Product removed from wishlist!");
-        } else {
-            setWishItems([...wishItems, productId]);
-            toast.success("Product added to wishlist!");
-        }
-    }
-
+    // Check user session
     useEffect(() => {
+        const checkUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setUser(session?.user || null);
+
+            if (session?.user) {
+                // Load user's cart and wishlist
+                fetchUserCart(session.user.id);
+                fetchUserWishlist(session.user.id);
+            }
+        };
+
+        checkUser();
+
+        // Set up auth state listener
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+                setUser(session?.user || null);
+                if (session?.user) {
+                    fetchUserCart(session.user.id);
+                    fetchUserWishlist(session.user.id);
+                } else {
+                    setCartItems([]);
+                    setWishlistItems([]);
+                }
+            }
+        );
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    // Fetch products from database
+    const fetchProducts = async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('products')
+                .select(`
+                    *,
+                    categories (
+                        name,
+                        image_url
+                    )
+                `)
+                .gt('stock', 0)
+                .order('created_at', { ascending: false })
+                .limit(8);
+
+            if (error) throw error;
+
+            console.log('Products fetched:', data?.length);
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            toast.error('Failed to load products');
+            return [];
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Fetch categories from database
+    const fetchCategories = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('categories')
+                .select('*')
+                .eq('is_active', true)
+                .order('name')
+                .limit(6);
+
+            if (error) throw error;
+
+            console.log('Categories fetched:', data?.length);
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            toast.error('Failed to load categories');
+            return [];
+        }
+    };
+
+    // Fetch user's cart items
+    const fetchUserCart = async (userId) => {
+        try {
+            const { data, error } = await supabase
+                .from('cart_items')
+                .select('product_id')
+                .eq('user_id', userId);
+
+            if (error) throw error;
+
+            const cartProductIds = data?.map(item => item.product_id) || [];
+            setCartItems(cartProductIds);
+        } catch (error) {
+            console.error('Error fetching cart:', error);
+        }
+    };
+
+    // Fetch user's wishlist items
+    const fetchUserWishlist = async (userId) => {
+        try {
+            const { data, error } = await supabase
+                .from('wishlist_items')
+                .select('product_id')
+                .eq('user_id', userId);
+
+            if (error) throw error;
+
+            const wishlistProductIds = data?.map(item => item.product_id) || [];
+            setWishlistItems(wishlistProductIds);
+        } catch (error) {
+            console.error('Error fetching wishlist:', error);
+        }
+    };
+
+    // Load initial data
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [productsData, categoriesData] = await Promise.all([
+                    fetchProducts(),
+                    fetchCategories()
+                ]);
+
+                setProducts(productsData);
+                setCategories(categoriesData);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                toast.error('Failed to load page data');
+            }
+        };
+
+        loadData();
         document.title = 'Home - Sportswear Store';
     }, []);
 
+    const handleAddToCart = async (productId) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                toast.error("You must sign in first to add to cart");
+                navigate("/login");
+                return;
+            }
+
+            // Check if product is already in cart
+            const { data: existingItem, error: checkError } = await supabase
+                .from('cart_items')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .eq('product_id', productId)
+                .single();
+
+            if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+                throw checkError;
+            }
+
+            if (existingItem) {
+                // Update quantity
+                const { error: updateError } = await supabase
+                    .from('cart_items')
+                    .update({ quantity: existingItem.quantity + 1 })
+                    .eq('id', existingItem.id);
+
+                if (updateError) throw updateError;
+                toast.success("Product quantity updated in cart!");
+            } else {
+                // Add new item to cart
+                const { error: insertError } = await supabase
+                    .from('cart_items')
+                    .insert({
+                        user_id: session.user.id,
+                        product_id: productId,
+                        quantity: 1
+                    });
+
+                if (insertError) throw insertError;
+                toast.success("Product added to cart!");
+            }
+
+            // Update local state
+            setCartItems((prev) => [...prev, productId]);
+
+            // Refresh cart count
+            fetchUserCart(session.user.id);
+
+        } catch (error) {
+            console.error('Error adding to cart:', error);
+            toast.error(error.message || 'Failed to add to cart');
+        }
+    };
+
+    const handleWishlistAction = async (productId) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                toast.error("You must sign in first to manage wishlist");
+                navigate("/login");
+                return;
+            }
+
+            // Check if product is already in wishlist
+            const { data: existingItem, error: checkError } = await supabase
+                .from('wishlist_items')
+                .select('*')
+                .eq('user_id', session.user.id)
+                .eq('product_id', productId)
+                .single();
+
+            if (checkError && checkError.code !== 'PGRST116') {
+                throw checkError;
+            }
+
+            if (existingItem) {
+                // Remove from wishlist
+                const { error: deleteError } = await supabase
+                    .from('wishlist_items')
+                    .delete()
+                    .eq('id', existingItem.id);
+
+                if (deleteError) throw deleteError;
+
+                setWishlistItems(wishlistItems.filter(id => id !== productId));
+                toast.success("Product removed from wishlist!");
+            } else {
+                // Add to wishlist
+                const { error: insertError } = await supabase
+                    .from('wishlist_items')
+                    .insert({
+                        user_id: session.user.id,
+                        product_id: productId
+                    });
+
+                if (insertError) throw insertError;
+
+                setWishlistItems([...wishlistItems, productId]);
+                toast.success("Product added to wishlist!");
+            }
+
+            // Refresh wishlist
+            fetchUserWishlist(session.user.id);
+
+        } catch (error) {
+            console.error('Error updating wishlist:', error);
+            toast.error(error.message || 'Failed to update wishlist');
+        }
+    };
+
+    // Check if product is in wishlist
+    const isInWishlist = (productId) => {
+        return wishlistItems.includes(productId);
+    };
+
+    // Check if product is in cart
+    const isInCart = (productId) => {
+        return cartItems.includes(productId);
+    };
+
+    // Get cart items count
+    const cartItemsCount = cartItems.length;
+
+    // Loading state
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading products...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
+            {/* Header Section */}
             <header className='flex flex-col lg:flex-row justify-center gap-6 lg:gap-0 px-5 lg:px-30 py-6 relative'>
                 <div className='w-full text-center md:text-left lg:w-3/12 mb-2 lg:mb-0'>
                     <HomeCategory />
@@ -161,172 +310,253 @@ export default function Home() {
                 </div>
             </header>
 
-            {/* Products section */}
+         
+
+            {/* Products Section */}
             <section className='my-10 px-4 sm:px-6 lg:px-30'>
-                {/* title */}
-                <div className='px-2 sm:px-0'>
+                {/* Title */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className='px-2 sm:px-0'
+                >
                     <div className='flex items-center gap-5'>
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Our Products</h1>
                     </div>
                     <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mt-5 sm:mt-7 mb-6 sm:mb-10 text-gray-800'>Explore Our Sportswear</h1>
-                </div>
+                </motion.div>
 
-                {/* Products */}
+                {/* Products Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
-                    {staticProducts.map((product) => (
-                        <div key={product._id} className=''>
-                            {/* card */}
-                            <div className='cursor-pointer product bg-white p-3 sm:p-4 rounded-xl lg:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between h-full border border-gray-100 hover:-translate-y-2'>
-                                {/* Product Image */}
-                                <Link to={`/productdetails/${product._id}`}>
-                                    <div className="overflow-hidden rounded-lg lg:rounded-xl">
-                                        <img
-                                            src={product.imageCover}
-                                            alt={product.title}
-                                            className="w-full h-40 sm:h-48 lg:h-52 object-cover hover:scale-105 transition-transform duration-500"
-                                        />
-                                    </div>
+                    {products.length > 0 ? (
+                        products.map((product, index) => (
+                            <motion.div
+                                key={product.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                                className=''
+                            >
+                                {/* Product Card */}
+                                <div className='cursor-pointer product bg-white p-3 sm:p-4 rounded-xl lg:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between h-full border border-gray-100 hover:-translate-y-2'>
+                                    {/* Product Image */}
+                                    <Link to={`/productdetails/${product.id}`}>
+                                        <div className="overflow-hidden rounded-lg lg:rounded-xl relative">
+                                            <img
+                                                src={product.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop'}
+                                                alt={product.title}
+                                                className="w-full h-40 sm:h-48 lg:h-52 object-cover hover:scale-105 transition-transform duration-500"
+                                                onError={(e) => {
+                                                    e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop';
+                                                }}
+                                            />
+                                            {/* Stock Badge */}
+                                            {product.stock <= 10 && product.stock > 0 && (
+                                                <div className="absolute top-2 left-2 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                                                    Only {product.stock} left
+                                                </div>
+                                            )}
+                                            {product.stock === 0 && (
+                                                <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                                                    Out of Stock
+                                                </div>
+                                            )}
+                                        </div>
 
-                                    {/* Product Info */}
-                                    <div className="mt-3 sm:mt-4 space-y-1">
-                                        <span className="inline-block text-xs font-medium text-gray-400 uppercase tracking-widest">
-                                            {product.category.name}
-                                        </span>
-                                        <h3 className="text-sm sm:text-base font-semibold text-gray-800 leading-snug line-clamp-2">
-                                            {product.title}
-                                        </h3>
+                                        {/* Product Info */}
+                                        <div className="mt-3 sm:mt-4 space-y-1">
+                                            <span className="inline-block text-xs font-medium text-gray-400 uppercase tracking-widest">
+                                                {product.categories?.name || product.category || 'Uncategorized'}
+                                            </span>
+                                            <h3 className="text-sm sm:text-base font-semibold text-gray-800 leading-snug line-clamp-2 hover:text-blue-600 transition-colors duration-300">
+                                                {product.title}
+                                            </h3>
 
-                                        <div className="flex justify-between items-center mt-2">
-                                            <span className="text-blue-600 font-bold text-xs sm:text-sm">${product.price}</span>
-                                            <div className="flex items-center text-amber-500 text-xs sm:text-sm">
-                                                <i className="fas fa-star mr-1"></i>
-                                                {product.ratingsAverage}
+                                            <div className="flex justify-between items-center mt-2">
+                                                <span className="text-blue-600 font-bold text-xs sm:text-sm">${parseFloat(product.price).toFixed(2)}</span>
+                                                <div className="flex items-center text-amber-500 text-xs sm:text-sm">
+                                                    <i className="fas fa-star mr-1"></i>
+                                                    {product.ratingsAverage || 4.5}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                Stock: {product.stock}
                                             </div>
                                         </div>
+                                    </Link>
+
+                                    {/* Action Buttons */}
+                                    <div className="mt-3 sm:mt-5 flex justify-between items-center gap-2 sm:gap-3">
+                                        <button
+                                            onClick={() => handleAddToCart(product.id)}
+                                            disabled={isInCart(product.id) || product.stock <= 0}
+                                            className={`cursor-pointer flex-1 py-1 sm:py-2 rounded-lg lg:rounded-xl transition-all duration-300 text-xs sm:text-sm font-medium 
+                                                    ${isInCart(product.id)
+                                                    ? "bg-gray-400 text-white cursor-not-allowed"
+                                                    : product.stock <= 0
+                                                        ? "bg-red-100 text-red-600 cursor-not-allowed"
+                                                        : "bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 hover:shadow-lg"}`}
+                                        >
+                                            {isInCart(product.id)
+                                                ? <><i className="fas fa-check mr-1"></i> Added</>
+                                                : product.stock <= 0
+                                                    ? <><i className="fas fa-times mr-1"></i> Out of Stock</>
+                                                    : <><i className="fas fa-cart-plus mr-1"></i> Add to Cart</>}
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleWishlistAction(product.id)}
+                                            className={`cursor-pointer p-1 sm:p-2 rounded-full border transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 ${isInWishlist(product.id)
+                                                ? "bg-gradient-to-r from-pink-50 to-rose-50 border-rose-400 text-rose-500 focus:ring-rose-300"
+                                                : "border-gray-300 text-gray-500 hover:text-rose-500 hover:border-rose-400 hover:bg-gradient-to-r hover:from-pink-50 hover:to-rose-50 focus:ring-rose-300"
+                                                }`}
+                                            title={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                                        >
+                                            <i className={`fa-solid fa-heart text-sm sm:text-lg transition-all duration-300 ${isInWishlist(product.id)
+                                                ? "animate-pulse"
+                                                : "hover:scale-110"
+                                                }`}></i>
+                                        </button>
                                     </div>
-                                </Link>
-
-                                {/* Action Buttons */}
-                                <div className="mt-3 sm:mt-5 flex justify-between items-center gap-2 sm:gap-3">
-                                    <button
-                                        onClick={() => handleAddToCart(product._id)}
-                                        disabled={addedItems.includes(product._id)}
-                                        className={`cursor-pointer flex-1 py-1 sm:py-2 rounded-lg lg:rounded-xl transition-all duration-300 text-xs sm:text-sm font-medium 
-                                                ${addedItems.includes(product._id) ? "bg-gray-400 text-white cursor-not-allowed" : "bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 hover:shadow-lg"}`}
-                                    >
-                                        {addedItems.includes(product._id) ? "Added" : "Add to Cart"}
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleWishlistAction(product._id)}
-                                        className={`cursor-pointer p-1 sm:p-2 rounded-full border transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 ${wishItems.includes(product._id)
-                                            ? "bg-gradient-to-r from-pink-50 to-rose-50 border-rose-400 text-rose-500 focus:ring-rose-300"
-                                            : "border-gray-300 text-gray-500 hover:text-rose-500 hover:border-rose-400 hover:bg-gradient-to-r hover:from-pink-50 hover:to-rose-50 focus:ring-rose-300"
-                                            }`}
-                                        title={wishItems.includes(product._id) ? "Remove from wishlist" : "Add to wishlist"}
-                                    >
-                                        <i className={`fa-solid fa-heart text-sm sm:text-lg transition-all duration-300 ${wishItems.includes(product._id)
-                                            ? "animate-pulse"
-                                            : "hover:scale-110"
-                                            }`}></i>
-                                    </button>
                                 </div>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center py-12">
+                            <div className="text-gray-400 mb-4">
+                                <i className="fas fa-box-open text-4xl"></i>
                             </div>
+                            <h3 className="text-lg font-semibold text-gray-600 mb-2">No Products Available</h3>
+                            <p className="text-gray-500">Check back soon for new arrivals!</p>
                         </div>
-                    ))}
+                    )}
                 </div>
 
-                <div className='flex justify-center mt-8 lg:mt-10'>
-                    <Link to={'/products'}
-                        className="w-full sm:w-1/2 md:w-1/3 lg:w-[15%] py-3 px-4 text-center border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
-                    >
-                        View All Products
-                    </Link>
-                </div>
+                {products.length > 0 && (
+                    <div className='flex justify-center mt-8 lg:mt-10'>
+                        <Link to={'/products'}
+                            className="w-full sm:w-1/2 md:w-1/3 lg:w-[15%] py-3 px-4 text-center border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                        >
+                            <i className="fas fa-eye mr-2"></i> View All Products
+                        </Link>
+                    </div>
+                )}
             </section>
 
-            {/* category section */}
+            {/* Category Section */}
             <section className='px-5 lg:px-30 py-16 bg-gradient-to-b from-blue-50/30 via-white to-gray-50/30'>
-                {/* title */}
-                <div className='px-2 sm:px-0 mb-12'>
+                {/* Title */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className='px-2 sm:px-0 mb-12'
+                >
                     <div className='flex items-center gap-5 mb-4'>
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Categories</h1>
                     </div>
                     <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 text-gray-800'>Browse Sportswear Categories</h1>
                     <p className='text-gray-600 text-base lg:text-lg'>Discover our premium sportswear collections</p>
-                </div>
+                </motion.div>
 
-                {/* main section */}
+                {/* Categories Grid */}
                 <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8'>
-                    {staticCategories.map((categories) => (
-                        <div
-                            key={categories._id}
-                            className='group relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer border border-gray-100'
-                        >
-                            {/* Background gradient overlay */}
-                            <div className='absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div>
+                    {categories.length > 0 ? (
+                        categories.map((category, index) => (
+                            <motion.div
+                                key={category.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                                whileHover={{ scale: 1.02 }}
+                                className='group relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer border border-gray-100'
+                            >
+                                {/* Background gradient overlay */}
+                                <div className='absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div>
 
-                            {/* Content container */}
-                            <div className='relative p-6 lg:p-8 flex flex-col items-center text-center'>
-                                {/* Image container with modern styling */}
-                                <div className='relative mb-6 overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-teal-50 p-4 group-hover:from-blue-100 group-hover:to-teal-100 transition-all duration-300'>
-                                    <img
-                                        src={categories.image}
-                                        className='w-16 h-16 lg:w-20 lg:h-20 object-cover object-center mx-auto group-hover:scale-110 transition-all duration-300'
-                                        alt={categories.name}
-                                    />
-                                    {/* Decorative circle */}
-                                    <div className='absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-blue-400 to-teal-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300'></div>
+                                {/* Content container */}
+                                <div className='relative p-6 lg:p-8 flex flex-col items-center text-center'>
+                                    {/* Image container with modern styling */}
+                                    <div className='relative mb-6 overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-teal-50 p-4 group-hover:from-blue-100 group-hover:to-teal-100 transition-all duration-300'>
+                                        <img
+                                            src={category.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
+                                            className='w-16 h-16 lg:w-20 lg:h-20 object-cover object-center mx-auto group-hover:scale-110 transition-all duration-300'
+                                            alt={category.name}
+                                            onError={(e) => {
+                                                e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop';
+                                            }}
+                                        />
+                                        {/* Decorative circle */}
+                                        <div className='absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-blue-400 to-teal-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300'></div>
+                                    </div>
+
+                                    {/* Category name */}
+                                    <h3 className='font-semibold text-lg lg:text-xl text-gray-800 group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-teal-500 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300'>
+                                        {category.name}
+                                    </h3>
+
+                                    {/* Subtle description */}
+                                    <p className='text-sm text-gray-500 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 line-clamp-2'>
+                                        {category.description || 'Explore collection'}
+                                    </p>
                                 </div>
 
-                                {/* Category name */}
-                                <h3 className='font-semibold text-lg lg:text-xl text-gray-800 group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-teal-500 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300'>
-                                    {categories.name}
-                                </h3>
-
-                                {/* Subtle description */}
-                                <p className='text-sm text-gray-500 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0'>
-                                    Explore collection
-                                </p>
+                                {/* Bottom border accent */}
+                                <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left'></div>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center py-12">
+                            <div className="text-gray-400 mb-4">
+                                <i className="fas fa-tags text-4xl"></i>
                             </div>
-
-                            {/* Bottom border accent */}
-                            <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left'></div>
+                            <h3 className="text-lg font-semibold text-gray-600 mb-2">No Categories Available</h3>
+                            <p className="text-gray-500">Categories will be added soon!</p>
                         </div>
-                    ))}
+                    )}
                 </div>
 
-                <div className='flex justify-center mt-8 lg:mt-10'>
-                    <Link to={'/category'}
-                        className="w-full sm:w-1/2 md:w-1/3 lg:w-[15%] py-3 px-4 text-center border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
-                    >
-                        View All Categories
-                    </Link>
-                </div>
+                {categories.length > 0 && (
+                    <div className='flex justify-center mt-8 lg:mt-10'>
+                        <Link to={'/category'}
+                            className="w-full sm:w-1/2 md:w-1/3 lg:w-[15%] py-3 px-4 text-center border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                        >
+                            <i className="fas fa-list mr-2"></i> View All Categories
+                        </Link>
+                    </div>
+                )}
             </section>
 
-            {/* Features section */}
+            {/* Features Section */}
             <section className='py-20 px-5 lg:px-30 bg-gradient-to-br from-blue-50/30 via-white to-teal-50/30 relative overflow-hidden'>
                 {/* Background decorative elements */}
                 <div className='absolute top-10 left-10 w-20 h-20 bg-gradient-to-r from-blue-400/20 to-teal-400/20 rounded-full blur-xl'></div>
                 <div className='absolute bottom-10 right-10 w-32 h-32 bg-gradient-to-r from-blue-300/10 to-teal-300/10 rounded-full blur-2xl'></div>
 
                 {/* Section header */}
-                <div className='text-center mb-16'>
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className='text-center mb-16'
+                >
                     <div className='inline-flex items-center gap-3 mb-4'>
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h2 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Why Choose Us</h2>
                     </div>
                     <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 text-gray-800'>Premium Sportswear Experience</h1>
                     <p className='text-gray-600 text-base lg:text-lg max-w-2xl mx-auto'>We're committed to providing exceptional service and support at every step of your fitness journey</p>
-                </div>
+                </motion.div>
 
                 {/* Features grid */}
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-12 max-w-7xl mx-auto'>
                     {/* First card - Free Delivery */}
-                    <div className='group relative'>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className='group relative'
+                    >
                         {/* Card */}
                         <div className='bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-3 border border-gray-100 relative overflow-hidden'>
                             {/* Hover gradient overlay */}
@@ -362,10 +592,15 @@ export default function Home() {
                             {/* Bottom accent line */}
                             <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center'></div>
                         </div>
-                    </div>
+                    </motion.div>
 
                     {/* Second card - Customer Service */}
-                    <div className='group relative'>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className='group relative'
+                    >
                         <div className='bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-3 border border-gray-100 relative overflow-hidden'>
                             <div className='absolute inset-0 bg-gradient-to-br from-blue-500/5 to-teal-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div>
 
@@ -395,10 +630,15 @@ export default function Home() {
 
                             <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center'></div>
                         </div>
-                    </div>
+                    </motion.div>
 
                     {/* Third card - Money Back Guarantee */}
-                    <div className='group relative md:col-span-2 lg:col-span-1 md:mx-auto lg:mx-0 md:max-w-sm lg:max-w-none'>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className='group relative md:col-span-2 lg:col-span-1 md:mx-auto lg:mx-0 md:max-w-sm lg:max-w-none'
+                    >
                         <div className='bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-3 border border-gray-100 relative overflow-hidden'>
                             <div className='absolute inset-0 bg-gradient-to-br from-blue-500/5 to-teal-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500'></div>
 
@@ -425,11 +665,16 @@ export default function Home() {
 
                             <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center'></div>
                         </div>
-                    </div>
+                    </motion.div>
                 </div>
 
                 {/* Optional: Additional trust indicators */}
-                <div className='mt-16 text-center'>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className='mt-16 text-center'
+                >
                     <div className='inline-flex items-center gap-6 text-gray-500 text-sm'>
                         <div className='flex items-center gap-2'>
                             <i className="fas fa-shield-alt bg-gradient-to-r from-blue-500 to-teal-500 bg-clip-text text-transparent"></i>
@@ -441,12 +686,12 @@ export default function Home() {
                             <span>10k+ Happy Customers</span>
                         </div>
                         <div className='w-px h-4 bg-gradient-to-b from-blue-200 to-teal-200'></div>
-                        <div className='flex items-center gap-2'>
+                        <div className="flex items-center gap-2">
                             <i className="fas fa-award bg-gradient-to-r from-blue-500 to-teal-500 bg-clip-text text-transparent"></i>
                             <span>Premium Quality</span>
                         </div>
                     </div>
-                </div>
+                </motion.div>
             </section>
         </>
     );
