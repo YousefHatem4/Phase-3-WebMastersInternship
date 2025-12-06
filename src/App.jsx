@@ -1,3 +1,4 @@
+// src/App.jsx
 import './App.css'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
@@ -19,10 +20,8 @@ import ResetPassword from './components/ResetPassword/ResetPassword'
 import ProductDetails from './components/ProductDetails/ProductDetails'
 import Checkout from './components/CheckOut/Checkout'
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute'
+import AdminProtectedRoute from './components/AdminProtectedRoute/AdminProtectedRoute'
 import Admin from './components/Admin/Admin'
-
-
-
 
 const routers = createBrowserRouter([
   {
@@ -43,21 +42,19 @@ const routers = createBrowserRouter([
       { path: 'verfiycode', element: <VerfiyCode /> },
       { path: 'resetpassword', element: <ResetPassword /> },
       { path: 'checkout', element: <ProtectedRoute><Checkout /></ProtectedRoute> },
-      { path: 'admin', element: <ProtectedRoute><Admin /></ProtectedRoute> },
+      { path: 'admin', element: <AdminProtectedRoute><Admin /></AdminProtectedRoute> },
       { path: 'productdetails/:id', element: <ProductDetails /> },
       { path: '*', element: <NotFound /> },
     ]
   }
 ])
 
-
 function App() {
-  return <>
-          <UserContextProvider>
-            <RouterProvider router={routers}></RouterProvider>
-          </UserContextProvider>
-  </>
-
+  return (
+    <UserContextProvider>
+      <RouterProvider router={routers}></RouterProvider>
+    </UserContextProvider>
+  )
 }
 
 export default App

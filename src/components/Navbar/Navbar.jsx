@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
-import style from './Navbar.module.css'
+// src/components/Navbar/Navbar.jsx
+import React, { useContext, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { userContext } from '../../Context/userContext'
+import { supabase } from '../../supabaseClient'
 
 export default function Navbar() {
     const location = useLocation();
@@ -8,16 +10,33 @@ export default function Navbar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const navigate = useNavigate();
 
+    // Get user data from context
+    const { userToken, user, isAdmin, setUserToken, setUser } = useContext(userContext);
+
     // Static cart data
     const cartItemsCount = 3; // Static number of items in cart
 
-    // Check if user is logged in (static for demo)
-    const isUserLoggedIn = localStorage.getItem('userToken') !== null;
+    // Check if user is logged in
+    const isUserLoggedIn = userToken !== null;
 
-    function logOut() {
-        localStorage.removeItem('userToken');
-        navigate('/');
-        window.location.reload(); // Refresh to update login state
+    async function logOut() {
+        try {
+            // Sign out from Supabase
+            await supabase.auth.signOut();
+
+            // Clear local state
+            setUserToken(null);
+            setUser(null);
+            localStorage.removeItem('userToken');
+
+            // Navigate to home
+            navigate('/');
+
+            // Close mobile menu if open
+            setMenuOpen(false);
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
     }
 
     return <>
@@ -25,13 +44,11 @@ export default function Navbar() {
             <p className='font-serif text-white'>Summer Sale For All Sportswear And Free Express Delivery - OFF 50%! <Link to={'products'} className='ms-2 underline font-medium'>ShopNow</Link></p>
         </div>
 
-
         <nav className="bg-white sticky w-full z-30 top-0 start-0 border-b border-gray-200 shadow-sm">
             <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
                 <Link to={''} className="flex items-center space-x-3 rtl:space-x-reverse">
                     <span className="self-center text-2xl font-bold whitespace-nowrap text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent transition-all duration-300">SportFlex</span>
                 </Link>
-
 
                 <div className="flex items-center md:order-2 space-x-3 md:space-x-0 rtl:space-x-reverse">
                     {isUserLoggedIn && <>
@@ -54,7 +71,6 @@ export default function Navbar() {
                         </svg></>}
                     </button>
                 </div>
-
 
                 <div className={`items-center ${menuOpen ? 'block' : 'hidden'} justify-between w-full md:flex md:w-auto md:order-1`} id="navbar-sticky">
                     <ul className="flex flex-col md:gap-5 p-4 md:p-0 mt-4 font-medium rounded-lg md:space-x-6 rtl:space-x-reverse md:flex-row md:mt-0 text-center md:text-left">
@@ -94,14 +110,29 @@ export default function Navbar() {
                                 <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-teal-500 transition-all duration-600 md:duration-300 group-hover:w-full"></span>
                             </Link>
                         </li>
+
+                        {/* Show Admin link only for admin users */}
+                        {isAdmin && (
+                            <li>
+                                <Link to={'admin'} onClick={() => setMenuOpen(false)} className={`block py-2 px-3 ${currentPath === '/admin' ? 'bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent'} rounded md:p-0 relative group transition-all duration-300`}>
+                                    Admin Panel
+                                    <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-teal-500 transition-all duration-600 md:duration-300 group-hover:w-full"></span>
+                                </Link>
+                            </li>
+                        )}
+
                         <li>
-                            {!isUserLoggedIn && <><Link to={'login'} onClick={() => setMenuOpen(false)} className={`block py-2 px-3 ${currentPath === '/login' ? 'bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent'} rounded md:p-0 relative group transition-all duration-300`}>
-                                Sign in
-                                <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-teal-500 transition-all duration-600 md:duration-300 group-hover:w-full"></span>
-                            </Link></>}
-                            {isUserLoggedIn && <> <span onClick={logOut} className="cursor-pointer font-bold text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent text-sm transition-all duration-300">
-                                Logout
-                            </span></>}
+                            {!isUserLoggedIn && (
+                                <Link to={'login'} onClick={() => setMenuOpen(false)} className={`block py-2 px-3 ${currentPath === '/login' ? 'bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent'} rounded md:p-0 relative group transition-all duration-300`}>
+                                    Sign in
+                                    <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-teal-500 transition-all duration-600 md:duration-300 group-hover:w-full"></span>
+                                </Link>
+                            )}
+                            {isUserLoggedIn && (
+                                <span onClick={logOut} className="cursor-pointer font-bold text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent text-sm transition-all duration-300">
+                                    Logout
+                                </span>
+                            )}
                         </li>
                     </ul>
                 </div>

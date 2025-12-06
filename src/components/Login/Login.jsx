@@ -1,8 +1,9 @@
+// src/components/Login/Login.jsx
 import React, { useContext, useEffect, useState } from 'react'
-import style from './Login.module.css'
 import { useFormik } from 'formik'
 import { Link, useNavigate } from 'react-router-dom'
 import { userContext } from '../../Context/userContext'
+import { supabase } from '../../supabaseClient'
 
 export default function Login() {
     const [isLoading, setIsLoading] = useState(false);
@@ -13,42 +14,35 @@ export default function Login() {
     }, [])
 
     let navigate = useNavigate();
-    let { setUserToken } = useContext(userContext);
-
-    // Static demo credentials
-    const demoCredentials = {
-        email: 'demo@sportswear.com',
-        password: 'password123'
-    };
+    let { setUserToken, setUser, isAdmin } = useContext(userContext);
 
     async function signIn(values) {
         try {
             setIsLoading(true);
             setErrorMessage('');
 
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: values.email,
+                password: values.password,
+            });
 
-            // Check against demo credentials
-            if (values.email === demoCredentials.email && values.password === demoCredentials.password) {
-                const demoToken = 'demo_user_token_' + Date.now();
-                setUserToken(demoToken);
-                localStorage.setItem('userToken', demoToken);
-                navigate('/');
-            } else {
-                // For any other credentials, still allow login but show demo message
-                if (values.email && values.password) {
-                    const demoToken = 'demo_user_token_' + Date.now();
-                    setUserToken(demoToken);
-                    localStorage.setItem('userToken', demoToken);
-                    navigate('/');
+            if (error) throw error;
+
+            if (data.session) {
+                setUserToken(data.session.access_token);
+                setUser(data.user);
+                localStorage.setItem('userToken', data.session.access_token);
+
+                // Check if admin and redirect accordingly
+                if (values.email === 'yousef.hatem.developer@gmail.com') {
+                    navigate('/admin');
                 } else {
-                    setErrorMessage('Please enter both email and password');
+                    navigate('/');
                 }
             }
         } catch (error) {
             console.log('Login error:', error);
-            setErrorMessage('Login failed. Please try again.');
+            setErrorMessage(error.message || 'Login failed. Please check your credentials.');
         } finally {
             setIsLoading(false);
         }
@@ -67,7 +61,7 @@ export default function Login() {
             {/* Image Section - Hidden on mobile */}
             <div className="hidden md:block w-1/2 bg-gray-100">
                 <img
-                    src="Auth_Image.jpg"
+                    src="/Auth_Image.jpg"
                     alt="Sportswear Store"
                     className="w-full h-full object-cover"
                 />
@@ -121,7 +115,7 @@ export default function Login() {
                                         onChange={formik.handleChange}
                                         onBlur={formik.handleBlur}
                                         className="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors duration-300"
-                                        placeholder="Enter any email"
+                                        placeholder="Enter your email"
                                     />
                                 </div>
                             </div>
@@ -141,7 +135,7 @@ export default function Login() {
                                         onChange={formik.handleChange}
                                         onBlur={formik.handleBlur}
                                         className="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors duration-300"
-                                        placeholder="Enter any password"
+                                        placeholder="Enter your password"
                                     />
                                 </div>
                             </div>
@@ -170,7 +164,7 @@ export default function Login() {
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
                                         <div className="flex items-center">
@@ -187,7 +181,21 @@ export default function Login() {
                             </div>
                         </form>
 
-
+                        <div className="mt-6">
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center">
+                                    <div className="w-full border-t border-gray-300" />
+                                </div>
+                                <div className="relative flex justify-center text-sm">
+                                    <span className="px-2 bg-white text-gray-500">
+                                        Demo Credentials
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="mt-3 text-center text-xs text-gray-500">
+                                <p>Admin: yousef.hatem.developer@gmail.com / 123456</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

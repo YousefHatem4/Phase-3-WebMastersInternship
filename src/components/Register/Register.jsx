@@ -1,8 +1,9 @@
+// src/components/Register/Register.jsx
 import React, { useContext, useState } from 'react'
-import style from './Register.module.css'
 import { useFormik } from 'formik'
 import { Link, useNavigate } from 'react-router-dom'
 import { userContext } from '../../Context/userContext'
+import { supabase } from '../../supabaseClient'
 
 export default function Register() {
     const [isLoading, setIsLoading] = useState(false);
@@ -10,16 +11,13 @@ export default function Register() {
     const [successMessage, setSuccessMessage] = useState('');
 
     let navigate = useNavigate();
-    let { setUserToken } = useContext(userContext);
+    let { setUserToken, setUser } = useContext(userContext);
 
     async function signUp(values) {
         try {
             setIsLoading(true);
             setErrorMessage('');
             setSuccessMessage('');
-
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1500));
 
             // Basic validation
             if (values.password !== values.rePassword) {
@@ -30,20 +28,40 @@ export default function Register() {
                 throw new Error("Password should be at least 6 characters");
             }
 
-            // Create demo user token
-            const demoToken = 'demo_user_token_' + Date.now();
-            setUserToken(demoToken);
-            localStorage.setItem('userToken', demoToken);
+            const { data, error } = await supabase.auth.signUp({
+                email: values.email,
+                password: values.password,
+                options: {
+                    data: {
+                        full_name: values.name,
+                        phone: values.phone
+                    }
+                }
+            });
 
-            setSuccessMessage('Registration successful! Welcome to SportFlex!');
+            if (error) throw error;
 
-            setTimeout(() => {
-                navigate('/');
-            }, 2000);
+            if (data.session) {
+                // Auto login after registration
+                setUserToken(data.session.access_token);
+                setUser(data.user);
+                localStorage.setItem('userToken', data.session.access_token);
+                setSuccessMessage('Registration successful! Welcome to SportFlex!');
+
+                setTimeout(() => {
+                    navigate('/');
+                }, 2000);
+            } else {
+                // Email confirmation required
+                setSuccessMessage('Registration successful! Please check your email to confirm your account.');
+                setTimeout(() => {
+                    navigate('/login');
+                }, 3000);
+            }
 
         } catch (error) {
             console.log('Registration error:', error.message);
-            setErrorMessage(error.message);
+            setErrorMessage(error.message || 'Registration failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -65,7 +83,7 @@ export default function Register() {
             {/* Image Section - Hidden on mobile */}
             <div className="hidden md:block w-1/2 bg-gray-100">
                 <img
-                    src="Auth_Image.jpg"
+                    src="/Auth_Image.jpg"
                     alt="Sportswear Store"
                     className="w-full h-full object-cover"
                 />
@@ -222,7 +240,7 @@ export default function Register() {
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
                                         <div className="flex items-center">
@@ -238,8 +256,6 @@ export default function Register() {
                                 </button>
                             </div>
                         </form>
-
-
                     </div>
                 </div>
             </div>

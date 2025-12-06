@@ -1,10 +1,10 @@
-// src/components/ProtectedRoute/ProtectedRoute.jsx
+// src/components/ProtectedRoute/AdminProtectedRoute.jsx
 import React, { useContext } from 'react'
 import { Navigate } from 'react-router-dom'
 import { userContext } from '../../Context/userContext'
 
-export default function ProtectedRoute({ children }) {
-    const { userToken, loading } = useContext(userContext);
+export default function AdminProtectedRoute({ children }) {
+    const { userToken, isAdmin, loading } = useContext(userContext);
 
     // Show loading state while checking authentication
     if (loading) {
@@ -21,6 +21,11 @@ export default function ProtectedRoute({ children }) {
     // Redirect to login if not authenticated
     if (!userToken) {
         return <Navigate to="/login" replace />;
+    }
+
+    // Redirect to home if not admin
+    if (!isAdmin) {
+        return <Navigate to="/" replace />;
     }
 
     return children;
