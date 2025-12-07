@@ -1,11 +1,12 @@
-// Admin.jsx
+// Admin.jsx - COMPLETE CODE WITH MULTIPLE IMAGES SUPPORT
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
     FaBox, FaUsers, FaShoppingCart, FaChartLine, FaCog,
     FaSignOutAlt, FaPlus, FaEdit, FaTrash, FaEye,
-    FaSpinner, FaCheck, FaTimes, FaTags, FaTag
+    FaSpinner, FaCheck, FaTimes, FaTags, FaTag,
+    FaImage, FaTimesCircle, FaShoppingBag
 } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +34,8 @@ export default function Admin() {
         price: '',
         category_id: '',
         stock: '',
-        image_url: ''
+        image_url: '', // Main image URL
+        additionalImages: [] // Array for additional images
     });
     const [editingProduct, setEditingProduct] = useState(null);
     const [showProductModal, setShowProductModal] = useState(false);
@@ -82,8 +84,6 @@ export default function Admin() {
                 return;
             }
 
-            console.log('User is admin:', adminRole);
-
         } catch (error) {
             console.error('Admin access check error:', error);
         }
@@ -95,7 +95,7 @@ export default function Admin() {
 
             // Load all data in parallel
             const [productsData, categoriesData, ordersData, usersData] = await Promise.all([
-                fetchProducts(),
+                fetchProductsWithImages(),
                 fetchCategories(),
                 fetchOrders(),
                 fetchUsers()
@@ -116,9 +116,10 @@ export default function Admin() {
         }
     };
 
-    const fetchProducts = async () => {
+    const fetchProductsWithImages = async () => {
         try {
-            const { data, error } = await supabase
+            // First get products
+            const { data: products, error: productsError } = await supabase
                 .from('products')
                 .select(`
                     *,
@@ -129,10 +130,29 @@ export default function Admin() {
                 `)
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            return data || [];
+            if (productsError) throw productsError;
+
+            // Then get images for each product
+            const productsWithImages = await Promise.all(
+                products.map(async (product) => {
+                    const { data: images, error: imagesError } = await supabase
+                        .from('product_images')
+                        .select('*')
+                        .eq('product_id', product.id)
+                        .order('display_order', { ascending: true });
+
+                    if (imagesError) throw imagesError;
+
+                    return {
+                        ...product,
+                        images: images || []
+                    };
+                })
+            );
+
+            return productsWithImages || [];
         } catch (error) {
-            console.error('Error fetching products:', error);
+            console.error('Error fetching products with images:', error);
             toast.error('Failed to load products');
             return [];
         }
@@ -159,14 +179,14 @@ export default function Admin() {
             const { data, error } = await supabase
                 .from('orders')
                 .select(`
-          *,
-          order_items (
-            id,
-            product_title,
-            quantity,
-            price
-          )
-        `)
+                    *,
+                    order_items (
+                        id,
+                        product_title,
+                        quantity,
+                        price
+                    )
+                `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -206,7 +226,7 @@ export default function Admin() {
         });
     };
 
-    // PRODUCT FUNCTIONS
+    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT
     const handleProductSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -224,6 +244,8 @@ export default function Admin() {
                 updated_at: new Date().toISOString(),
             };
 
+            let savedProduct;
+
             if (editingProduct) {
                 const { data, error } = await supabase
                     .from('products')
@@ -239,9 +261,10 @@ export default function Admin() {
                     .single();
 
                 if (error) throw error;
+                savedProduct = data;
 
-                setProducts(products.map(p => p.id === editingProduct.id ? data : p));
-                toast.success('Product updated successfully');
+                // Handle additional images for existing product
+                await handleProductImages(editingProduct.id);
             } else {
                 productData.created_by = session.user.id;
 
@@ -258,11 +281,22 @@ export default function Admin() {
                     .single();
 
                 if (error) throw error;
+                savedProduct = data;
 
-                setProducts([data, ...products]);
-                toast.success('Product added successfully');
+                // Handle additional images for new product
+                await handleProductImages(savedProduct.id);
             }
 
+            // Refresh product with images
+            const updatedProduct = await fetchProductWithImages(savedProduct.id);
+            
+            if (editingProduct) {
+                setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
+            } else {
+                setProducts([updatedProduct, ...products]);
+            }
+
+            toast.success('Product saved successfully');
             resetProductForm();
             setShowProductModal(false);
 
@@ -274,23 +308,137 @@ export default function Admin() {
         }
     };
 
-    const handleEditProduct = (product) => {
-        setEditingProduct(product);
-        setProductForm({
-            title: product.title,
-            description: product.description,
-            price: product.price,
-            category_id: product.category_id || '',
-            stock: product.stock,
-            image_url: product.image_url
-        });
-        setShowProductModal(true);
+    const handleProductImages = async (productId) => {
+        try {
+            // First, delete existing additional images (keep main image if it exists)
+            const { error: deleteError } = await supabase
+                .from('product_images')
+                .delete()
+                .eq('product_id', productId)
+                .neq('image_url', productForm.image_url); // Don't delete main image if it's in product_images
+
+            if (deleteError) throw deleteError;
+
+            // Then, add new additional images
+            if (productForm.additionalImages.length > 0) {
+                const imagesToInsert = productForm.additionalImages.map((imageUrl, index) => ({
+                    product_id: productId,
+                    image_url: imageUrl,
+                    display_order: index + 1, // Start from 1 (0 is for main image)
+                    alt_text: productForm.title
+                }));
+
+                const { error: insertError } = await supabase
+                    .from('product_images')
+                    .insert(imagesToInsert);
+
+                if (insertError) throw insertError;
+            }
+
+            // Also ensure main image is in product_images table
+            if (productForm.image_url) {
+                const { error: upsertError } = await supabase
+                    .from('product_images')
+                    .upsert({
+                        product_id: productId,
+                        image_url: productForm.image_url,
+                        display_order: 0,
+                        alt_text: productForm.title
+                    }, {
+                        onConflict: 'product_id,image_url'
+                    });
+
+                if (upsertError) throw upsertError;
+            }
+        } catch (error) {
+            console.error('Error handling product images:', error);
+            throw error;
+        }
+    };
+
+    const fetchProductWithImages = async (productId) => {
+        try {
+            // Get product
+            const { data: product, error: productError } = await supabase
+                .from('products')
+                .select(`
+                    *,
+                    categories (
+                        id,
+                        name
+                    )
+                `)
+                .eq('id', productId)
+                .single();
+
+            if (productError) throw productError;
+
+            // Get images
+            const { data: images, error: imagesError } = await supabase
+                .from('product_images')
+                .select('*')
+                .eq('product_id', productId)
+                .order('display_order', { ascending: true });
+
+            if (imagesError) throw imagesError;
+
+            return {
+                ...product,
+                images: images || []
+            };
+        } catch (error) {
+            console.error('Error fetching product with images:', error);
+            throw error;
+        }
+    };
+
+    const handleEditProduct = async (product) => {
+        try {
+            setEditingProduct(product);
+            
+            // Get product images
+            const { data: images, error } = await supabase
+                .from('product_images')
+                .select('*')
+                .eq('product_id', product.id)
+                .order('display_order', { ascending: true });
+
+            if (error) throw error;
+
+            // Separate main image (display_order = 0) from additional images
+            const mainImage = images?.find(img => img.display_order === 0);
+            const additionalImages = images?.filter(img => img.display_order > 0).map(img => img.image_url) || [];
+
+            setProductForm({
+                title: product.title,
+                description: product.description,
+                price: product.price,
+                category_id: product.category_id || '',
+                stock: product.stock,
+                image_url: mainImage?.image_url || product.image_url,
+                additionalImages: additionalImages
+            });
+            
+            setShowProductModal(true);
+        } catch (error) {
+            console.error('Error loading product for edit:', error);
+            toast.error('Failed to load product data');
+        }
     };
 
     const handleDeleteProduct = async (productId) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) return;
+        if (!window.confirm('Are you sure you want to delete this product? All associated images will also be deleted.')) return;
 
         try {
+            // Delete associated images first
+            const { error: imagesError } = await supabase
+                .from('product_images')
+                .delete()
+                .eq('product_id', productId);
+
+            if (imagesError) throw imagesError;
+
+            // Delete product
             const { error } = await supabase
                 .from('products')
                 .delete()
@@ -405,7 +553,8 @@ export default function Admin() {
             price: '',
             category_id: '',
             stock: '',
-            image_url: ''
+            image_url: '',
+            additionalImages: []
         });
         setEditingProduct(null);
     };
@@ -418,6 +567,26 @@ export default function Admin() {
             is_active: true
         });
         setEditingCategory(null);
+    };
+
+    // IMAGE HANDLING FUNCTIONS
+    const addAdditionalImage = () => {
+        const newImage = prompt('Enter image URL:');
+        if (newImage && newImage.trim() !== '') {
+            setProductForm({
+                ...productForm,
+                additionalImages: [...productForm.additionalImages, newImage.trim()]
+            });
+        }
+    };
+
+    const removeAdditionalImage = (index) => {
+        const newImages = [...productForm.additionalImages];
+        newImages.splice(index, 1);
+        setProductForm({
+            ...productForm,
+            additionalImages: newImages
+        });
     };
 
     const handleLogout = async () => {
@@ -576,9 +745,12 @@ export default function Admin() {
                         >
                             <div className="relative h-48 overflow-hidden">
                                 <img
-                                    src={product.image_url}
+                                    src={product.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop'}
                                     alt={product.title}
                                     className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                                    onError={(e) => {
+                                        e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop';
+                                    }}
                                 />
                                 <div className="absolute top-3 right-3 flex gap-2">
                                     <button
@@ -594,6 +766,13 @@ export default function Admin() {
                                         <FaTrash className="text-red-500" />
                                     </button>
                                 </div>
+                                {product.images?.length > 0 && (
+                                    <div className="absolute top-3 left-3">
+                                        <span className="px-2 py-1 bg-black/70 text-white text-xs rounded-full flex items-center gap-1">
+                                            <FaImage /> {product.images.length}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                             <div className="p-5">
                                 <h4 className="font-bold text-lg text-gray-800 truncate">{product.title}</h4>
@@ -834,9 +1013,402 @@ export default function Admin() {
                             </button>
                         </div>
                     </div>
+                    <div>
+                        <h4 className="font-semibold text-gray-700 mb-3">System Information</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-gray-500">Products</p>
+                                <p className="font-bold text-lg">{stats.totalProducts}</p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-gray-500">Categories</p>
+                                <p className="font-bold text-lg">{stats.totalCategories}</p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-gray-500">Users</p>
+                                <p className="font-bold text-lg">{stats.totalUsers}</p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-lg">
+                                <p className="text-gray-500">Orders</p>
+                                <p className="font-bold text-lg">{stats.totalOrders}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </motion.div>
+    );
+
+    const renderProductModal = () => (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+            >
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800">
+                            {editingProduct ? 'Edit Product' : 'Add New Product'}
+                        </h3>
+                        <button
+                            onClick={() => {
+                                setShowProductModal(false);
+                                resetProductForm();
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleProductSubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Product Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    name="title"
+                                    value={productForm.title}
+                                    onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter product name"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Category
+                                </label>
+                                <select
+                                    name="category_id"
+                                    value={productForm.category_id}
+                                    onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">Select category</option>
+                                    {categories.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Price ($) *
+                                </label>
+                                <input
+                                    type="number"
+                                    name="price"
+                                    value={productForm.price}
+                                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                                    required
+                                    min="0"
+                                    step="0.01"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0.00"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Stock Quantity *
+                                </label>
+                                <input
+                                    type="number"
+                                    name="stock"
+                                    value={productForm.stock}
+                                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                                    required
+                                    min="0"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0"
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Main Image URL *
+                                </label>
+                                <input
+                                    type="url"
+                                    name="image_url"
+                                    value={productForm.image_url}
+                                    onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://example.com/main-image.jpg"
+                                />
+                                {productForm.image_url && (
+                                    <div className="mt-2">
+                                        <img 
+                                            src={productForm.image_url} 
+                                            alt="Main image preview" 
+                                            className="w-32 h-32 object-cover rounded-lg border"
+                                            onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Additional Images
+                                </label>
+                                <div className="space-y-3">
+                                    <button
+                                        type="button"
+                                        onClick={addAdditionalImage}
+                                        className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors"
+                                    >
+                                        <FaPlus /> Add Image URL
+                                    </button>
+                                    
+                                    {productForm.additionalImages.map((imageUrl, index) => (
+                                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                            <div className="flex-1">
+                                                <input
+                                                    type="url"
+                                                    value={imageUrl}
+                                                    onChange={(e) => {
+                                                        const newImages = [...productForm.additionalImages];
+                                                        newImages[index] = e.target.value;
+                                                        setProductForm({ ...productForm, additionalImages: newImages });
+                                                    }}
+                                                    className="w-full px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    placeholder="https://example.com/image.jpg"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeAdditionalImage(index)}
+                                                className="text-red-500 hover:text-red-700"
+                                            >
+                                                <FaTimesCircle />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    
+                                    {productForm.additionalImages.length > 0 && (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                                            {productForm.additionalImages.map((imageUrl, index) => (
+                                                <div key={index} className="relative">
+                                                    <img
+                                                        src={imageUrl}
+                                                        alt={`Additional image ${index + 1}`}
+                                                        className="w-full h-24 object-cover rounded-lg border"
+                                                        onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeAdditionalImage(index)}
+                                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Description *
+                                </label>
+                                <textarea
+                                    name="description"
+                                    value={productForm.description}
+                                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                                    required
+                                    rows="4"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter product description"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowProductModal(false);
+                                    resetProductForm();
+                                }}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600'
+                                    } text-white flex items-center gap-2`}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <FaSpinner className="animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : editingProduct ? (
+                                    <>
+                                        <FaCheck />
+                                        Update Product
+                                    </>
+                                ) : (
+                                    <>
+                                        <FaPlus />
+                                        Add Product
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
+    );
+
+    const renderCategoryModal = () => (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800">
+                            {editingCategory ? 'Edit Category' : 'Add New Category'}
+                        </h3>
+                        <button
+                            onClick={() => {
+                                setShowCategoryModal(false);
+                                resetCategoryForm();
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleCategorySubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Category Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={categoryForm.name}
+                                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter category name"
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Description
+                                </label>
+                                <textarea
+                                    name="description"
+                                    value={categoryForm.description}
+                                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                                    rows="3"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter category description"
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Image URL *
+                                </label>
+                                <input
+                                    type="url"
+                                    name="image_url"
+                                    value={categoryForm.image_url}
+                                    onChange={(e) => setCategoryForm({ ...categoryForm, image_url: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://example.com/category-image.jpg"
+                                />
+                                {categoryForm.image_url && (
+                                    <div className="mt-2">
+                                        <img 
+                                            src={categoryForm.image_url} 
+                                            alt="Category image preview" 
+                                            className="w-32 h-32 object-cover rounded-lg border"
+                                            onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="flex items-center gap-2 mb-2">
+                                    <input
+                                        type="checkbox"
+                                        name="is_active"
+                                        checked={categoryForm.is_active}
+                                        onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+                                        className="rounded text-blue-500"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">Active Category</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCategoryModal(false);
+                                    resetCategoryForm();
+                                }}
+                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                                    } text-white flex items-center gap-2`}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <FaSpinner className="animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : editingCategory ? (
+                                    <>
+                                        <FaCheck />
+                                        Update Category
+                                    </>
+                                ) : (
+                                    <>
+                                        <FaTag />
+                                        Add Category
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
     );
 
     if (isInitializing && activeTab === 'dashboard') {
@@ -899,296 +1471,10 @@ export default function Admin() {
             </div>
 
             {/* Product Modal */}
-            {showProductModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                    >
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-gray-800">
-                                    {editingProduct ? 'Edit Product' : 'Add New Product'}
-                                </h3>
-                                <button
-                                    onClick={() => {
-                                        setShowProductModal(false);
-                                        resetProductForm();
-                                    }}
-                                    className="text-gray-400 hover:text-gray-600"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleProductSubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Product Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="title"
-                                            value={productForm.title}
-                                            onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
-                                            required
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Enter product name"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Category
-                                        </label>
-                                        <select
-                                            name="category_id"
-                                            value={productForm.category_id}
-                                            onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="">Select category</option>
-                                            {categories.map(cat => (
-                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Price ($) *
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="price"
-                                            value={productForm.price}
-                                            onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                                            required
-                                            min="0"
-                                            step="0.01"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="0.00"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Stock Quantity *
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="stock"
-                                            value={productForm.stock}
-                                            onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                                            required
-                                            min="0"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="0"
-                                        />
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Image URL *
-                                        </label>
-                                        <input
-                                            type="url"
-                                            name="image_url"
-                                            value={productForm.image_url}
-                                            onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
-                                            required
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="https://example.com/image.jpg"
-                                        />
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Description *
-                                        </label>
-                                        <textarea
-                                            name="description"
-                                            value={productForm.description}
-                                            onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                                            required
-                                            rows="4"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Enter product description"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowProductModal(false);
-                                            resetProductForm();
-                                        }}
-                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
-                                            ? 'bg-gray-400 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600'
-                                            } text-white flex items-center gap-2`}
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <FaSpinner className="animate-spin" />
-                                                Saving...
-                                            </>
-                                        ) : editingProduct ? (
-                                            <>
-                                                <FaCheck />
-                                                Update Product
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FaPlus />
-                                                Add Product
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
+            {showProductModal && renderProductModal()}
 
             {/* Category Modal */}
-            {showCategoryModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                    >
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-gray-800">
-                                    {editingCategory ? 'Edit Category' : 'Add New Category'}
-                                </h3>
-                                <button
-                                    onClick={() => {
-                                        setShowCategoryModal(false);
-                                        resetCategoryForm();
-                                    }}
-                                    className="text-gray-400 hover:text-gray-600"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleCategorySubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Category Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="name"
-                                            value={categoryForm.name}
-                                            onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                                            required
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Enter category name"
-                                        />
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Description
-                                        </label>
-                                        <textarea
-                                            name="description"
-                                            value={categoryForm.description}
-                                            onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                                            rows="3"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Enter category description"
-                                        />
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Image URL *
-                                        </label>
-                                        <input
-                                            type="url"
-                                            name="image_url"
-                                            value={categoryForm.image_url}
-                                            onChange={(e) => setCategoryForm({ ...categoryForm, image_url: e.target.value })}
-                                            required
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="https://example.com/category-image.jpg"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="flex items-center gap-2 mb-2">
-                                            <input
-                                                type="checkbox"
-                                                name="is_active"
-                                                checked={categoryForm.is_active}
-                                                onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
-                                                className="rounded text-blue-500"
-                                            />
-                                            <span className="text-sm font-medium text-gray-700">Active Category</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowCategoryModal(false);
-                                            resetCategoryForm();
-                                        }}
-                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
-                                            ? 'bg-gray-400 cursor-not-allowed'
-                                            : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
-                                            } text-white flex items-center gap-2`}
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <FaSpinner className="animate-spin" />
-                                                Saving...
-                                            </>
-                                        ) : editingCategory ? (
-                                            <>
-                                                <FaCheck />
-                                                Update Category
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FaTag />
-                                                Add Category
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
+            {showCategoryModal && renderCategoryModal()}
         </div>
     );
 }
