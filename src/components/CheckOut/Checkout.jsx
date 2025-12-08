@@ -3,53 +3,63 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { supabase } from '../../supabaseClient';
 
 export default function Checkout() {
   const [apiError, setApiError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [cartItems, setCartItems] = useState([])
+  const [user, setUser] = useState(null)
+  const [subtotal, setSubtotal] = useState(0)
+  const [shipping, setShipping] = useState(0)
+  const [tax, setTax] = useState(0)
+  const [total, setTotal] = useState(0)
 
   const navigate = useNavigate();
 
-  // Static cart data for demo
-  const staticCart = {
-    data: {
-      products: [
-        {
-          product: {
-            id: "1",
-            title: "Running Shoes Pro",
-            imageCover: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=500&fit=crop"
-          },
-          price: 129.99,
-          count: 1
-        },
-        {
-          product: {
-            id: "3",
-            title: "Yoga Leggings Premium",
-            imageCover: "https://images.unsplash.com/photo-1506629905607-e48b0e67d879?w=500&h=500&fit=crop"
-          },
-          price: 59.99,
-          count: 2
-        }
-      ]
-    }
-  };
-
+  // Fetch user session and cart items
   useEffect(() => {
+    checkUser()
+    loadCartFromStorage()
     document.title = 'Checkout - Sportswear Store'
-    // Redirect if no cart items
-    if (!staticCart.data?.products?.length) {
-      navigate('/cart');
-    }
-  }, [navigate])
+  }, [])
 
-  // Calculate cart totals
-  const subtotal = staticCart?.data?.products?.reduce((total, item) => total + (item.price * item.count), 0) || 0
-  const shipping = subtotal > 0 ? 15 : 0
-  const tax = subtotal * 0.1 // 10% tax
-  const total = subtotal + shipping + tax
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    setUser(session?.user || null)
+  }
+
+  const loadCartFromStorage = () => {
+    try {
+      const storedCart = localStorage.getItem('checkout_cart')
+      if (storedCart) {
+        const cartData = JSON.parse(storedCart)
+        if (cartData.products && cartData.products.length > 0) {
+          setCartItems(cartData.products)
+
+          // Calculate totals
+          const calculatedSubtotal = cartData.products.reduce((total, item) =>
+            total + (item.price * item.count), 0)
+          const calculatedShipping = calculatedSubtotal > 0 ? 15 : 0
+          const calculatedTax = calculatedSubtotal * 0.1
+          const calculatedTotal = calculatedSubtotal + calculatedShipping + calculatedTax
+
+          setSubtotal(calculatedSubtotal)
+          setShipping(calculatedShipping)
+          setTax(calculatedTax)
+          setTotal(calculatedTotal)
+        } else {
+          navigate('/cart')
+        }
+      } else {
+        navigate('/cart')
+      }
+    } catch (error) {
+      console.error('Error loading cart:', error)
+      navigate('/cart')
+    }
+  }
 
   const validationSchema = Yup.object({
     details: Yup.string()
@@ -72,17 +82,195 @@ export default function Checkout() {
       .required('Last name is required'),
   })
 
+  // Simple email sending using fetch to your own backend or Supabase Edge Function
+  const sendOrderNotification = async (orderData, emailType = 'customer') => {
+    try {
+      // Prepare email data
+      const emailData = {
+        to: emailType === 'admin' ? 'yousef.hatem.developer@gmail.com' : orderData.customer_email,
+        subject: emailType === 'admin' ? 'New Order Received - Sportswear Store' : 'Order Confirmation - Sportswear Store',
+        order_details: {
+          order_number: orderData.order_number || `ORD${Date.now()}`,
+          customer_name: orderData.customer_name,
+          customer_email: orderData.customer_email,
+          total_amount: orderData.total_amount,
+          shipping_address: orderData.shipping_address,
+          shipping_city: orderData.shipping_city,
+          shipping_phone: orderData.shipping_phone,
+          payment_method: orderData.payment_method,
+          order_date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          items: orderData.items || []
+        }
+      };
+
+      // Log the email data (you can replace this with actual email sending)
+      console.log(`Email would be sent to: ${emailData.to}`);
+      console.log('Email data:', emailData);
+
+      // If you have a backend API endpoint for sending emails, uncomment and use this:
+      /*
+      const response = await fetch('https://your-backend.com/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send email');
+      }
+      */
+
+      return { success: true, message: 'Email notification prepared' };
+    } catch (error) {
+      console.error('Error preparing email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  const createOrder = async (shippingAddress) => {
+    try {
+      setLoading(true)
+
+      if (!user) {
+        throw new Error('User not authenticated')
+      }
+
+      // Generate order number
+      const orderNumber = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+      // Prepare order data
+      const orderData = {
+        customer_name: `${formik.values.firstName} ${formik.values.lastName}`,
+        customer_email: formik.values.email,
+        shipping_address: shippingAddress.details,
+        shipping_city: shippingAddress.city,
+        shipping_phone: shippingAddress.phone,
+        payment_method: paymentMethod,
+        items: cartItems.map(item => ({
+          product_title: item.product.title,
+          quantity: item.count,
+          price: item.price,
+          subtotal: item.price * item.count
+        })),
+        order_number: orderNumber,
+        total_amount: total,
+        subtotal: subtotal,
+        shipping_cost: shipping,
+        tax_amount: tax
+      }
+
+      // 1. Create order in database
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          order_number: orderNumber,
+          customer_name: orderData.customer_name,
+          customer_email: orderData.customer_email,
+          user_id: user.id,
+          total_amount: total,
+          shipping_address: orderData.shipping_address,
+          shipping_city: orderData.shipping_city,
+          shipping_phone: orderData.shipping_phone,
+          payment_method: orderData.payment_method,
+          shipping_cost: shipping,
+          tax_amount: tax,
+          status: 'Pending'
+        }])
+        .select()
+        .single()
+
+      if (orderError) throw orderError
+
+      // 2. Create order items
+      const orderItems = cartItems.map(item => ({
+        order_id: order.id,
+        product_id: item.product.id,
+        product_title: item.product.title,
+        quantity: item.count,
+        price: item.price
+      }))
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems)
+
+      if (itemsError) throw itemsError
+
+      // 3. Update product sales count using a simpler approach
+      for (const item of cartItems) {
+        try {
+          // First get current sales count
+          const { data: product } = await supabase
+            .from('products')
+            .select('sales')
+            .eq('id', item.product.id)
+            .single()
+
+          if (product) {
+            const newSales = (product.sales || 0) + item.count
+
+            await supabase
+              .from('products')
+              .update({ sales: newSales })
+              .eq('id', item.product.id)
+          }
+        } catch (err) {
+          console.error('Error updating product sales:', err)
+          // Continue even if sales update fails
+        }
+      }
+
+      // 4. Clear cart items for this user
+      const { error: clearCartError } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id)
+
+      if (clearCartError) console.error('Error clearing cart:', clearCartError)
+
+      // 5. Send email notifications
+      // Send to customer
+      await sendOrderNotification(orderData, 'customer')
+
+      // Send to admin (you)
+      await sendOrderNotification(orderData, 'admin')
+
+      // 6. Clear localStorage cart
+      localStorage.removeItem('checkout_cart')
+
+      toast.success('Order placed successfully! You will receive a confirmation email shortly.')
+
+      setTimeout(() => {
+        navigate('/')
+      }, 2000)
+
+    } catch (err) {
+      console.error('Order error:', err)
+      setApiError(err.message || 'Order failed. Please try again.')
+      setLoading(false)
+    }
+  }
+
   const OnlinePayment = async (shippingAddress) => {
     try {
       setLoading(true);
-      // Simulate API delay
+
+      // First create the order
+      await createOrder(shippingAddress)
+
+      // Simulate online payment processing
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Demo success for online payment
       toast.success('Payment processed successfully!');
-      setTimeout(() => {
-        navigate('/');
-      }, 1500);
+
     } catch (err) {
       console.log('Payment error:', err);
       setApiError('Payment failed. Please try again.');
@@ -91,20 +279,7 @@ export default function Checkout() {
   }
 
   const CashPayment = async (shippingAddress) => {
-    try {
-      setLoading(true);
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      toast.success('Order placed successfully! You will receive a confirmation email shortly.');
-      setTimeout(() => {
-        navigate('/');
-      }, 2000);
-    } catch (err) {
-      console.log('Order error:', err);
-      setApiError('Order failed. Please try again.');
-      setLoading(false);
-    }
+    await createOrder(shippingAddress)
   }
 
   const formik = useFormik({
@@ -132,7 +307,7 @@ export default function Checkout() {
     }
   })
 
-  if (!staticCart.data?.products?.length) {
+  if (!cartItems.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-teal-50/30 flex items-center justify-center">
         <div className="text-center">
@@ -456,6 +631,9 @@ export default function Checkout() {
                   </div>
                 </div>
               )}
+
+              {/* Hidden submit button to fix Formik warning */}
+              <button type="submit" className="hidden">Submit</button>
             </form>
           </div>
 
@@ -471,10 +649,10 @@ export default function Checkout() {
 
               {/* Cart Items */}
               <div className="space-y-4 mb-8 max-h-64 overflow-y-auto custom-scrollbar">
-                {staticCart.data.products.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50/50 to-teal-50/50 rounded-2xl border border-gray-100/50">
+                {cartItems.map((item, index) => (
+                  <div key={index} className="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50/50 to-teal-50/50 rounded-2xl border border-gray-100/50">
                     <img
-                      src={item.product.imageCover}
+                      src={item.product.imageCover || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
                       alt={item.product.title}
                       className="w-16 h-16 rounded-xl object-contain border border-gray-100 bg-white"
                     />
@@ -484,7 +662,7 @@ export default function Checkout() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-gray-900">${(item.price * item.count).toFixed(2)}</p>
-                      <p className="text-xs text-gray-500">${item.price} each</p>
+                      <p className="text-xs text-gray-500">${item.price.toFixed(2)} each</p>
                     </div>
                   </div>
                 ))}
@@ -519,8 +697,9 @@ export default function Checkout() {
                 </div>
               </div>
 
-              {/* Place Order Button */}
+              {/* Place Order Button - Added type="button" */}
               <button
+                type="button"
                 onClick={formik.handleSubmit}
                 disabled={loading || !formik.isValid}
                 className={`w-full py-5 px-6 rounded-2xl font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500/20 shadow-lg ${loading || !formik.isValid
@@ -568,22 +747,25 @@ export default function Checkout() {
         </div>
       </div>
 
-      <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 6px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: #f1f5f9;
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #cbd5e1;
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #94a3b8;
-                }
-            `}</style>
+      {/* Fixed inline style - moved to separate style tag */}
+      <style>
+        {`
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}
+      </style>
     </div>
   )
 }

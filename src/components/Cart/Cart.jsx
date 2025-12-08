@@ -177,14 +177,15 @@ export default function Cart() {
     // Calculate totals
     const subtotal = cartItems.reduce((total, item) => total + item.subtotal, 0)
     const shipping = subtotal > 0 ? 15 : 0
-    const total = subtotal + shipping
+    const tax = subtotal * 0.1
+    const total = subtotal + shipping + tax
     const hasItems = cartItems.length > 0
 
     useEffect(() => {
         document.title = 'Cart - Sportswear Store'
     }, [])
 
-    // Handle checkout
+    // Handle checkout - UPDATED TO NAVIGATE TO CHECKOUT PAGE
     const handleCheckout = () => {
         if (!user) {
             toast.error('Please login to checkout')
@@ -197,9 +198,21 @@ export default function Cart() {
             return
         }
 
-        // Here you would integrate with your payment system
-        toast.success('Proceeding to checkout...')
-        // navigate('/checkout')
+        // Save cart items to localStorage to pass to checkout
+        localStorage.setItem('checkout_cart', JSON.stringify({
+            products: cartItems.map(item => ({
+                product: {
+                    id: item.product.id,
+                    title: item.product.title,
+                    imageCover: item.product.image_url
+                },
+                price: item.price,
+                count: item.quantity
+            }))
+        }))
+
+        // Navigate to checkout page
+        navigate('/checkout')
     }
 
     // Move item to wishlist
@@ -367,8 +380,8 @@ export default function Cart() {
                                                     onClick={() => handleQuantityChange(item.id, 1)}
                                                     disabled={isLoading || item.product.stock <= item.quantity}
                                                     className={`px-3 cursor-pointer transition h-full flex items-center ${item.product.stock <= item.quantity
-                                                            ? 'text-gray-300 cursor-not-allowed'
-                                                            : 'text-gray-500 hover:text-blue-500'
+                                                        ? 'text-gray-300 cursor-not-allowed'
+                                                        : 'text-gray-500 hover:text-blue-500'
                                                         }`}
                                                 >
                                                     +
@@ -439,6 +452,10 @@ export default function Cart() {
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">Shipping</span>
                                         <span className="font-medium">${shipping.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Tax (10%)</span>
+                                        <span className="font-medium">${tax.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between pt-4 border-t border-gray-100">
                                         <span className="text-lg font-semibold text-gray-900">Total</span>

@@ -4,7 +4,6 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
 import Home from './components/Home/Home'
 import Register from './components/Register/Register'
-import Brands from './components/Brands/Brands'
 import Cart from './components/Cart/Cart'
 import About from './components/About/About'
 import Category from './components/Category/Category'
@@ -22,6 +21,7 @@ import Checkout from './components/CheckOut/Checkout'
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute'
 import AdminProtectedRoute from './components/AdminProtectedRoute/AdminProtectedRoute'
 import Admin from './components/Admin/Admin'
+import OrderDetails from './components/OrderDetails/OrderDetails'
 
 const routers = createBrowserRouter([
   {
@@ -30,7 +30,6 @@ const routers = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'register', element: <Register /> },
-      { path: 'brands', element: <Brands /> },
       { path: 'cart', element: <ProtectedRoute><Cart /></ProtectedRoute> },
       { path: 'about', element: <About /> },
       { path: 'category', element: <Category /> },
@@ -43,6 +42,7 @@ const routers = createBrowserRouter([
       { path: 'resetpassword', element: <ResetPassword /> },
       { path: 'checkout', element: <ProtectedRoute><Checkout /></ProtectedRoute> },
       { path: 'admin', element: <AdminProtectedRoute><Admin /></AdminProtectedRoute> },
+      { path: 'order/:orderId', element: <AdminProtectedRoute><OrderDetails /></AdminProtectedRoute> },
       { path: 'productdetails/:id', element: <ProductDetails /> },
       { path: '*', element: <NotFound /> },
     ]
