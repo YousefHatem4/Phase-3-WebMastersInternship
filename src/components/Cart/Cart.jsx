@@ -361,7 +361,7 @@ export default function Cart() {
                                         {/* Price */}
                                         <div className="md:col-span-2 flex justify-start md:justify-center">
                                             <span className="text-gray-900 font-medium md:hidden mr-2">Price: </span>
-                                            <p className="text-gray-700 font-semibold">${item.price.toFixed(2)}</p>
+                                            <p className="text-gray-700 font-semibold">EGP {item.price.toFixed(2)}</p>
                                         </div>
 
                                         {/* Quantity Selector */}
@@ -393,7 +393,7 @@ export default function Cart() {
                                         <div className="md:col-span-2 flex items-center justify-between">
                                             <div>
                                                 <span className="text-gray-900 font-medium md:hidden">Subtotal: </span>
-                                                <p className="text-gray-900 font-semibold">${item.subtotal.toFixed(2)}</p>
+                                                <p className="text-gray-900 font-semibold">EGP {item.subtotal.toFixed(2)}</p>
                                             </div>
                                             <div className="flex gap-2">
                                                 <button
@@ -447,19 +447,19 @@ export default function Cart() {
                                 <div className="space-y-4 mb-6">
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">Subtotal</span>
-                                        <span className="font-medium">${subtotal.toFixed(2)}</span>
+                                        <span className="font-medium">EGP {subtotal.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">Shipping</span>
-                                        <span className="font-medium">${shipping.toFixed(2)}</span>
+                                        <span className="font-medium">EGP {shipping.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">Tax (10%)</span>
-                                        <span className="font-medium">${tax.toFixed(2)}</span>
+                                        <span className="font-medium">EGP {tax.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between pt-4 border-t border-gray-100">
                                         <span className="text-lg font-semibold text-gray-900">Total</span>
-                                        <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">${total.toFixed(2)}</span>
+                                        <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">EGP {total.toFixed(2)}</span>
                                     </div>
                                 </div>
 

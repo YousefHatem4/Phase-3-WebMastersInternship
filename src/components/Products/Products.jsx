@@ -417,7 +417,7 @@ export default function Products() {
                                         </h3>
 
                                         <div className="flex justify-between items-center mt-2">
-                                            <span className="text-blue-600 font-bold text-xs sm:text-sm">${parseFloat(product.price).toFixed(2)}</span>
+                                            <span className="text-blue-600 font-bold text-xs sm:text-sm">EGP {parseFloat(product.price).toFixed(2)}</span>
                                             <div className="flex items-center text-amber-500 text-xs sm:text-sm">
                                                 <i className="fas fa-star mr-1"></i>
                                                 {product.ratingsAverage || 4.5}

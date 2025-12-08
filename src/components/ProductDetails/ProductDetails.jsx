@@ -467,7 +467,7 @@ export default function ProductDetails() {
                             </span>
                         )}
                     </div>
-                    <h1 className='text-blue-600 text-xl md:text-2xl mt-3 md:mt-4 font-bold'>${product.price.toFixed(2)}</h1>
+                    <h1 className='text-blue-600 text-xl md:text-2xl mt-3 md:mt-4 font-bold'>EGP {product.price.toFixed(2)}</h1>
                     <p className='text-sm text-gray-700 w-full lg:w-[373px] mt-3 md:mt-5 leading-relaxed'>{product.description}</p>
                     <div className='bg-gradient-to-r from-blue-400 to-teal-400 w-full lg:w-[400px] h-[1px] mt-3 md:mt-5'></div>
 
@@ -518,7 +518,7 @@ export default function ProductDetails() {
                             <div>
                                 <h2 className='text-sm font-semibold text-gray-900'>Free Delivery</h2>
                                 <p className='text-xs text-gray-600 underline cursor-pointer hover:text-blue-500 transition-colors duration-300'>
-                                    Free delivery on orders over $100
+                                    Free delivery on orders over EGP 100
                                 </p>
                             </div>
                         </div>

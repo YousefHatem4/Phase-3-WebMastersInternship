@@ -1,4 +1,4 @@
-// Admin.jsx - COMPLETE CODE WITH MULTIPLE IMAGES SUPPORT
+// Admin.jsx - UPDATED WITH SHIPPING COST MANAGEMENT
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -6,7 +6,8 @@ import {
     FaBox, FaUsers, FaShoppingCart, FaChartLine, FaCog,
     FaSignOutAlt, FaPlus, FaEdit, FaTrash, FaEye,
     FaSpinner, FaCheck, FaTimes, FaTags, FaTag,
-    FaImage, FaTimesCircle, FaShoppingBag
+    FaImage, FaTimesCircle, FaShoppingBag, FaTruck,
+    FaMoneyBillWave, FaMapMarkerAlt, FaGlobeAfrica
 } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +18,7 @@ export default function Admin() {
     const [categories, setCategories] = useState([]);
     const [orders, setOrders] = useState([]);
     const [users, setUsers] = useState([]);
+    const [shippingCosts, setShippingCosts] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
     const [stats, setStats] = useState({
@@ -49,6 +51,18 @@ export default function Admin() {
     });
     const [editingCategory, setEditingCategory] = useState(null);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+    // Form states for shipping costs
+    const [shippingForm, setShippingForm] = useState({
+        governorate: '',
+        governorate_ar: '',
+        cost: '',
+        delivery_days: 3,
+        is_active: true,
+        notes: ''
+    });
+    const [editingShipping, setEditingShipping] = useState(null);
+    const [showShippingModal, setShowShippingModal] = useState(false);
 
     const navigate = useNavigate();
 
@@ -94,17 +108,19 @@ export default function Admin() {
             setIsInitializing(true);
 
             // Load all data in parallel
-            const [productsData, categoriesData, ordersData, usersData] = await Promise.all([
+            const [productsData, categoriesData, ordersData, usersData, shippingData] = await Promise.all([
                 fetchProductsWithImages(),
                 fetchCategories(),
                 fetchOrders(),
-                fetchUsers()
+                fetchUsers(),
+                fetchShippingCosts()
             ]);
 
             setProducts(productsData);
             setCategories(categoriesData);
             setOrders(ordersData);
             setUsers(usersData);
+            setShippingCosts(shippingData);
 
             calculateStats(productsData, categoriesData, ordersData, usersData);
 
@@ -214,6 +230,22 @@ export default function Admin() {
         }
     };
 
+    const fetchShippingCosts = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('shipping_costs')
+                .select('*')
+                .order('governorate');
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching shipping costs:', error);
+            toast.error('Failed to load shipping costs');
+            return [];
+        }
+    };
+
     const calculateStats = (productsData, categoriesData, ordersData, usersData) => {
         const totalRevenue = ordersData.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
 
@@ -226,7 +258,107 @@ export default function Admin() {
         });
     };
 
-    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT
+    // SHIPPING COST FUNCTIONS
+    const handleShippingSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            const shippingData = {
+                governorate: shippingForm.governorate,
+                governorate_ar: shippingForm.governorate_ar,
+                cost: parseFloat(shippingForm.cost),
+                delivery_days: parseInt(shippingForm.delivery_days),
+                is_active: shippingForm.is_active,
+                notes: shippingForm.notes,
+                updated_at: new Date().toISOString(),
+            };
+
+            if (editingShipping) {
+                const { data, error } = await supabase
+                    .from('shipping_costs')
+                    .update(shippingData)
+                    .eq('id', editingShipping.id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                setShippingCosts(shippingCosts.map(s => s.id === editingShipping.id ? data : s));
+                toast.success('Shipping cost updated successfully');
+            } else {
+                shippingData.created_by = session.user.id;
+
+                const { data, error } = await supabase
+                    .from('shipping_costs')
+                    .insert([shippingData])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                setShippingCosts([data, ...shippingCosts]);
+                toast.success('Shipping cost added successfully');
+            }
+
+            resetShippingForm();
+            setShowShippingModal(false);
+
+        } catch (error) {
+            console.error('Error saving shipping cost:', error);
+            toast.error(error.message || 'Failed to save shipping cost');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEditShipping = (shipping) => {
+        setEditingShipping(shipping);
+        setShippingForm({
+            governorate: shipping.governorate,
+            governorate_ar: shipping.governorate_ar || '',
+            cost: shipping.cost,
+            delivery_days: shipping.delivery_days || 3,
+            is_active: shipping.is_active,
+            notes: shipping.notes || ''
+        });
+        setShowShippingModal(true);
+    };
+
+    const handleDeleteShipping = async (shippingId) => {
+        if (!window.confirm('Are you sure you want to delete this shipping cost?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('shipping_costs')
+                .delete()
+                .eq('id', shippingId);
+
+            if (error) throw error;
+
+            setShippingCosts(shippingCosts.filter(s => s.id !== shippingId));
+            toast.success('Shipping cost deleted successfully');
+        } catch (error) {
+            console.error('Error deleting shipping cost:', error);
+            toast.error('Failed to delete shipping cost');
+        }
+    };
+
+    const resetShippingForm = () => {
+        setShippingForm({
+            governorate: '',
+            governorate_ar: '',
+            cost: '',
+            delivery_days: 3,
+            is_active: true,
+            notes: ''
+        });
+        setEditingShipping(null);
+    };
+
+    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT (keep existing)
     const handleProductSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -289,7 +421,7 @@ export default function Admin() {
 
             // Refresh product with images
             const updatedProduct = await fetchProductWithImages(savedProduct.id);
-            
+
             if (editingProduct) {
                 setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
             } else {
@@ -395,7 +527,7 @@ export default function Admin() {
     const handleEditProduct = async (product) => {
         try {
             setEditingProduct(product);
-            
+
             // Get product images
             const { data: images, error } = await supabase
                 .from('product_images')
@@ -418,7 +550,7 @@ export default function Admin() {
                 image_url: mainImage?.image_url || product.image_url,
                 additionalImages: additionalImages
             });
-            
+
             setShowProductModal(true);
         } catch (error) {
             console.error('Error loading product for edit:', error);
@@ -455,7 +587,7 @@ export default function Admin() {
         }
     };
 
-    // CATEGORY FUNCTIONS
+    // CATEGORY FUNCTIONS (keep existing)
     const handleCategorySubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -569,7 +701,7 @@ export default function Admin() {
         setEditingCategory(null);
     };
 
-    // IMAGE HANDLING FUNCTIONS
+    // IMAGE HANDLING FUNCTIONS (keep existing)
     const addAdditionalImage = () => {
         const newImage = prompt('Enter image URL:');
         if (newImage && newImage.trim() !== '') {
@@ -648,7 +780,7 @@ export default function Admin() {
                     { title: 'Categories', value: stats.totalCategories, icon: <FaTags />, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
                     { title: 'Total Orders', value: stats.totalOrders, icon: <FaShoppingCart />, color: 'bg-gradient-to-r from-green-500 to-green-600' },
                     { title: 'Total Users', value: stats.totalUsers, icon: <FaUsers />, color: 'bg-gradient-to-r from-pink-500 to-pink-600' },
-                    { title: 'Revenue', value: `$${stats.totalRevenue.toFixed(2)}`, icon: <FaChartLine />, color: 'bg-gradient-to-r from-orange-500 to-orange-600' }
+                    { title: 'Revenue', value: `EGP ${stats.totalRevenue.toFixed(2)}`, icon: <FaChartLine />, color: 'bg-gradient-to-r from-orange-500 to-orange-600' }
                 ].map((stat, index) => (
                     <motion.div
                         key={index}
@@ -679,6 +811,7 @@ export default function Admin() {
                             <tr className="bg-gray-50">
                                 <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Order Number</th>
                                 <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Customer</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Governorate</th>
                                 <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Date</th>
                                 <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Amount</th>
                                 <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Status</th>
@@ -689,8 +822,9 @@ export default function Admin() {
                                 <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50">
                                     <td className="py-3 px-4 text-sm text-gray-800 font-medium">{order.order_number}</td>
                                     <td className="py-3 px-4 text-sm text-gray-600">{order.customer_name}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-600">{order.shipping_governorate || 'Not specified'}</td>
                                     <td className="py-3 px-4 text-sm text-gray-600">{formatDate(order.created_at)}</td>
-                                    <td className="py-3 px-4 text-sm text-gray-600">${parseFloat(order.total_amount).toFixed(2)}</td>
+                                    <td className="py-3 px-4 text-sm text-gray-600">EGP {parseFloat(order.total_amount).toFixed(2)}</td>
                                     <td className="py-3 px-4">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
                                             order.status === 'Processing' || order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
@@ -779,7 +913,7 @@ export default function Admin() {
                                 <p className="text-gray-600 text-sm mt-1 line-clamp-2">{product.description}</p>
                                 <div className="flex justify-between items-center mt-4">
                                     <div>
-                                        <p className="text-blue-600 font-bold">${parseFloat(product.price).toFixed(2)}</p>
+                                        <p className="text-blue-600 font-bold">EGP {parseFloat(product.price).toFixed(2)}</p>
                                         <p className="text-sm text-gray-500">Stock: {product.stock}</p>
                                     </div>
                                     <div className="text-right">
@@ -874,6 +1008,82 @@ export default function Admin() {
         </motion.div>
     );
 
+    const renderShipping = () => (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+        >
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">Shipping Cost Management</h3>
+                <button
+                    onClick={() => {
+                        resetShippingForm();
+                        setShowShippingModal(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-lg hover:from-orange-600 hover:to-yellow-600 transition-all duration-300"
+                >
+                    <FaTruck /> Add Shipping Cost
+                </button>
+            </div>
+
+            {isInitializing ? (
+                <div className="flex justify-center items-center h-64">
+                    <FaSpinner className="animate-spin text-4xl text-blue-500" />
+                </div>
+            ) : (
+                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead>
+                                <tr className="bg-gradient-to-r from-orange-50 to-yellow-50">
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Governorate (English)</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Governorate (Arabic)</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Cost (EGP)</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Delivery Days</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Status</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {shippingCosts.map((shipping) => (
+                                    <tr key={shipping.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <td className="py-4 px-6 text-sm font-medium text-gray-800">{shipping.governorate}</td>
+                                        <td className="py-4 px-6 text-sm text-gray-600 font-arabic">{shipping.governorate_ar || '-'}</td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">EGP {parseFloat(shipping.cost).toFixed(2)}</td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">{shipping.delivery_days} days</td>
+                                        <td className="py-4 px-6">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${shipping.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                {shipping.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-6">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEditShipping(shipping)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                                >
+                                                    <FaEdit />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteShipping(shipping.id)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                >
+                                                    <FaTrash />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+        </motion.div>
+    );
+
     const renderOrders = () => (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -894,6 +1104,7 @@ export default function Admin() {
                                 <tr className="bg-gradient-to-r from-blue-50 to-teal-50">
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Order Number</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Customer</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Governorate</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Date</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Amount</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Status</th>
@@ -908,8 +1119,9 @@ export default function Admin() {
                                             <div>{order.customer_name}</div>
                                             <div className="text-xs text-gray-500">{order.customer_email}</div>
                                         </td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">{order.shipping_governorate || 'Not specified'}</td>
                                         <td className="py-4 px-6 text-sm text-gray-600">{formatDate(order.created_at)}</td>
-                                        <td className="py-4 px-6 text-sm text-gray-600">${parseFloat(order.total_amount).toFixed(2)}</td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">EGP {parseFloat(order.total_amount).toFixed(2)}</td>
                                         <td className="py-4 px-6">
                                             <select
                                                 value={order.status}
@@ -1039,243 +1251,7 @@ export default function Admin() {
         </motion.div>
     );
 
-    const renderProductModal = () => (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
-            >
-                <div className="p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold text-gray-800">
-                            {editingProduct ? 'Edit Product' : 'Add New Product'}
-                        </h3>
-                        <button
-                            onClick={() => {
-                                setShowProductModal(false);
-                                resetProductForm();
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                        >
-                            ✕
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleProductSubmit} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Product Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    name="title"
-                                    value={productForm.title}
-                                    onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter product name"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Category
-                                </label>
-                                <select
-                                    name="category_id"
-                                    value={productForm.category_id}
-                                    onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">Select category</option>
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Price ($) *
-                                </label>
-                                <input
-                                    type="number"
-                                    name="price"
-                                    value={productForm.price}
-                                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                                    required
-                                    min="0"
-                                    step="0.01"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="0.00"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Stock Quantity *
-                                </label>
-                                <input
-                                    type="number"
-                                    name="stock"
-                                    value={productForm.stock}
-                                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                                    required
-                                    min="0"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="0"
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Main Image URL *
-                                </label>
-                                <input
-                                    type="url"
-                                    name="image_url"
-                                    value={productForm.image_url}
-                                    onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="https://example.com/main-image.jpg"
-                                />
-                                {productForm.image_url && (
-                                    <div className="mt-2">
-                                        <img 
-                                            src={productForm.image_url} 
-                                            alt="Main image preview" 
-                                            className="w-32 h-32 object-cover rounded-lg border"
-                                            onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Additional Images
-                                </label>
-                                <div className="space-y-3">
-                                    <button
-                                        type="button"
-                                        onClick={addAdditionalImage}
-                                        className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors"
-                                    >
-                                        <FaPlus /> Add Image URL
-                                    </button>
-                                    
-                                    {productForm.additionalImages.map((imageUrl, index) => (
-                                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                                            <div className="flex-1">
-                                                <input
-                                                    type="url"
-                                                    value={imageUrl}
-                                                    onChange={(e) => {
-                                                        const newImages = [...productForm.additionalImages];
-                                                        newImages[index] = e.target.value;
-                                                        setProductForm({ ...productForm, additionalImages: newImages });
-                                                    }}
-                                                    className="w-full px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    placeholder="https://example.com/image.jpg"
-                                                />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeAdditionalImage(index)}
-                                                className="text-red-500 hover:text-red-700"
-                                            >
-                                                <FaTimesCircle />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    
-                                    {productForm.additionalImages.length > 0 && (
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
-                                            {productForm.additionalImages.map((imageUrl, index) => (
-                                                <div key={index} className="relative">
-                                                    <img
-                                                        src={imageUrl}
-                                                        alt={`Additional image ${index + 1}`}
-                                                        className="w-full h-24 object-cover rounded-lg border"
-                                                        onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeAdditionalImage(index)}
-                                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Description *
-                                </label>
-                                <textarea
-                                    name="description"
-                                    value={productForm.description}
-                                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                                    required
-                                    rows="4"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter product description"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowProductModal(false);
-                                    resetProductForm();
-                                }}
-                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600'
-                                    } text-white flex items-center gap-2`}
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <FaSpinner className="animate-spin" />
-                                        Saving...
-                                    </>
-                                ) : editingProduct ? (
-                                    <>
-                                        <FaCheck />
-                                        Update Product
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaPlus />
-                                        Add Product
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </motion.div>
-        </div>
-    );
-
-    const renderCategoryModal = () => (
+    const renderShippingModal = () => (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -1285,12 +1261,12 @@ export default function Admin() {
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-bold text-gray-800">
-                            {editingCategory ? 'Edit Category' : 'Add New Category'}
+                            {editingShipping ? 'Edit Shipping Cost' : 'Add New Shipping Cost'}
                         </h3>
                         <button
                             onClick={() => {
-                                setShowCategoryModal(false);
-                                resetCategoryForm();
+                                setShowShippingModal(false);
+                                resetShippingForm();
                             }}
                             className="text-gray-400 hover:text-gray-600"
                         >
@@ -1298,73 +1274,95 @@ export default function Admin() {
                         </button>
                     </div>
 
-                    <form onSubmit={handleCategorySubmit} className="space-y-6">
+                    <form onSubmit={handleShippingSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="md:col-span-2">
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Category Name *
+                                    Governorate (English) *
                                 </label>
                                 <input
                                     type="text"
-                                    name="name"
-                                    value={categoryForm.name}
-                                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                                    name="governorate"
+                                    value={shippingForm.governorate}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, governorate: e.target.value })}
                                     required
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter category name"
+                                    placeholder="e.g., Cairo"
                                 />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Description
-                                </label>
-                                <textarea
-                                    name="description"
-                                    value={categoryForm.description}
-                                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
-                                    rows="3"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter category description"
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Image URL *
-                                </label>
-                                <input
-                                    type="url"
-                                    name="image_url"
-                                    value={categoryForm.image_url}
-                                    onChange={(e) => setCategoryForm({ ...categoryForm, image_url: e.target.value })}
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="https://example.com/category-image.jpg"
-                                />
-                                {categoryForm.image_url && (
-                                    <div className="mt-2">
-                                        <img 
-                                            src={categoryForm.image_url} 
-                                            alt="Category image preview" 
-                                            className="w-32 h-32 object-cover rounded-lg border"
-                                            onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
-                                        />
-                                    </div>
-                                )}
                             </div>
 
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Governorate (Arabic)
+                                </label>
+                                <input
+                                    type="text"
+                                    name="governorate_ar"
+                                    value={shippingForm.governorate_ar}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, governorate_ar: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-arabic"
+                                    placeholder="e.g., القاهرة"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Cost (EGP) *
+                                </label>
+                                <input
+                                    type="number"
+                                    name="cost"
+                                    value={shippingForm.cost}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, cost: e.target.value })}
+                                    required
+                                    min="0"
+                                    step="0.01"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="30.00"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Delivery Days *
+                                </label>
+                                <input
+                                    type="number"
+                                    name="delivery_days"
+                                    value={shippingForm.delivery_days}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, delivery_days: e.target.value })}
+                                    required
+                                    min="1"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="3"
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
                                 <label className="flex items-center gap-2 mb-2">
                                     <input
                                         type="checkbox"
                                         name="is_active"
-                                        checked={categoryForm.is_active}
-                                        onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+                                        checked={shippingForm.is_active}
+                                        onChange={(e) => setShippingForm({ ...shippingForm, is_active: e.target.checked })}
                                         className="rounded text-blue-500"
                                     />
-                                    <span className="text-sm font-medium text-gray-700">Active Category</span>
+                                    <span className="text-sm font-medium text-gray-700">Active Shipping</span>
                                 </label>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Notes
+                                </label>
+                                <textarea
+                                    name="notes"
+                                    value={shippingForm.notes}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, notes: e.target.value })}
+                                    rows="3"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Additional notes about this shipping option..."
+                                />
                             </div>
                         </div>
 
@@ -1372,8 +1370,8 @@ export default function Admin() {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setShowCategoryModal(false);
-                                    resetCategoryForm();
+                                    setShowShippingModal(false);
+                                    resetShippingForm();
                                 }}
                                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                             >
@@ -1384,7 +1382,7 @@ export default function Admin() {
                                 disabled={isLoading}
                                 className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
                                     ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                                    : 'bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600'
                                     } text-white flex items-center gap-2`}
                             >
                                 {isLoading ? (
@@ -1392,15 +1390,15 @@ export default function Admin() {
                                         <FaSpinner className="animate-spin" />
                                         Saving...
                                     </>
-                                ) : editingCategory ? (
+                                ) : editingShipping ? (
                                     <>
                                         <FaCheck />
-                                        Update Category
+                                        Update Shipping Cost
                                     </>
                                 ) : (
                                     <>
-                                        <FaTag />
-                                        Add Category
+                                        <FaTruck />
+                                        Add Shipping Cost
                                     </>
                                 )}
                             </button>
@@ -1410,6 +1408,31 @@ export default function Admin() {
             </motion.div>
         </div>
     );
+
+    // Update sidebar navigation to include shipping
+    const sidebarItems = [
+        { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
+        { id: 'products', label: 'Products', icon: <FaBox /> },
+        { id: 'categories', label: 'Categories', icon: <FaTags /> },
+        { id: 'shipping', label: 'Shipping Costs', icon: <FaTruck /> },
+        { id: 'orders', label: 'Orders', icon: <FaShoppingCart /> },
+        { id: 'users', label: 'Users', icon: <FaUsers /> },
+        { id: 'settings', label: 'Settings', icon: <FaCog /> },
+    ];
+
+    // Update the main content render
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'dashboard': return renderDashboard();
+            case 'products': return renderProducts();
+            case 'categories': return renderCategories();
+            case 'shipping': return renderShipping();
+            case 'orders': return renderOrders();
+            case 'users': return renderUsers();
+            case 'settings': return renderSettings();
+            default: return renderDashboard();
+        }
+    };
 
     if (isInitializing && activeTab === 'dashboard') {
         return (
@@ -1434,14 +1457,7 @@ export default function Admin() {
                                 <p className="text-sm opacity-90 mt-1">Sportswear Store</p>
                             </div>
                             <nav className="space-y-2">
-                                {[
-                                    { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
-                                    { id: 'products', label: 'Products', icon: <FaBox /> },
-                                    { id: 'categories', label: 'Categories', icon: <FaTags /> },
-                                    { id: 'orders', label: 'Orders', icon: <FaShoppingCart /> },
-                                    { id: 'users', label: 'Users', icon: <FaUsers /> },
-                                    { id: 'settings', label: 'Settings', icon: <FaCog /> },
-                                ].map((item) => (
+                                {sidebarItems.map((item) => (
                                     <button
                                         key={item.id}
                                         onClick={() => setActiveTab(item.id)}
@@ -1460,21 +1476,15 @@ export default function Admin() {
 
                     {/* Main Content */}
                     <main className="flex-1">
-                        {activeTab === 'dashboard' && renderDashboard()}
-                        {activeTab === 'products' && renderProducts()}
-                        {activeTab === 'categories' && renderCategories()}
-                        {activeTab === 'orders' && renderOrders()}
-                        {activeTab === 'users' && renderUsers()}
-                        {activeTab === 'settings' && renderSettings()}
+                        {renderContent()}
                     </main>
                 </div>
             </div>
 
-            {/* Product Modal */}
+            {/* Modals */}
             {showProductModal && renderProductModal()}
-
-            {/* Category Modal */}
             {showCategoryModal && renderCategoryModal()}
+            {showShippingModal && renderShippingModal()}
         </div>
     );
 }

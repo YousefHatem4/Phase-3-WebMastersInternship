@@ -15,19 +15,54 @@ export default function Checkout() {
   const [shipping, setShipping] = useState(0)
   const [tax, setTax] = useState(0)
   const [total, setTotal] = useState(0)
+  const [shippingCosts, setShippingCosts] = useState([])
+  const [selectedGovernorate, setSelectedGovernorate] = useState('')
 
   const navigate = useNavigate();
 
-  // Fetch user session and cart items
+  // Fetch user session, cart items, and shipping costs
   useEffect(() => {
     checkUser()
     loadCartFromStorage()
+    fetchShippingCosts()
     document.title = 'Checkout - Sportswear Store'
   }, [])
+
+  useEffect(() => {
+    if (selectedGovernorate && shippingCosts.length > 0) {
+      calculateTotalsWithShipping()
+    }
+  }, [selectedGovernorate, shippingCosts])
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     setUser(session?.user || null)
+  }
+
+  const fetchShippingCosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shipping_costs')
+        .select('*')
+        .eq('is_active', true)
+        .order('governorate')
+
+      if (error) throw error
+      setShippingCosts(data || [])
+
+      // Set default governorate to Cairo if available
+      if (data && data.length > 0) {
+        const cairo = data.find(g => g.governorate === 'Cairo')
+        if (cairo) {
+          setSelectedGovernorate('Cairo')
+        } else {
+          setSelectedGovernorate(data[0].governorate)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching shipping costs:', error)
+      toast.error('Failed to load shipping costs')
+    }
   }
 
   const loadCartFromStorage = () => {
@@ -38,17 +73,13 @@ export default function Checkout() {
         if (cartData.products && cartData.products.length > 0) {
           setCartItems(cartData.products)
 
-          // Calculate totals
+          // Calculate subtotal and tax (shipping will be calculated separately)
           const calculatedSubtotal = cartData.products.reduce((total, item) =>
             total + (item.price * item.count), 0)
-          const calculatedShipping = calculatedSubtotal > 0 ? 15 : 0
           const calculatedTax = calculatedSubtotal * 0.1
-          const calculatedTotal = calculatedSubtotal + calculatedShipping + calculatedTax
 
           setSubtotal(calculatedSubtotal)
-          setShipping(calculatedShipping)
           setTax(calculatedTax)
-          setTotal(calculatedTotal)
         } else {
           navigate('/cart')
         }
@@ -61,12 +92,24 @@ export default function Checkout() {
     }
   }
 
+  const calculateTotalsWithShipping = () => {
+    if (!selectedGovernorate) return
+
+    const selectedShipping = shippingCosts.find(g => g.governorate === selectedGovernorate)
+    const shippingCost = selectedShipping ? selectedShipping.cost : 50.00 // Default cost
+
+    const calculatedTotal = subtotal + shippingCost + tax
+
+    setShipping(shippingCost)
+    setTotal(calculatedTotal)
+  }
+
   const validationSchema = Yup.object({
     details: Yup.string()
       .min(10, 'Address must be at least 10 characters')
       .required('Address is required'),
     phone: Yup.string()
-      .matches(/^[0-9+\-\s()]+$/, 'Invalid phone number')
+      .matches(/^01[0-9]{9}$/, 'Egyptian phone number must start with 01 and be 11 digits')
       .required('Phone number is required'),
     city: Yup.string()
       .min(2, 'City must be at least 2 characters')
@@ -82,59 +125,6 @@ export default function Checkout() {
       .required('Last name is required'),
   })
 
-  // Simple email sending using fetch to your own backend or Supabase Edge Function
-  const sendOrderNotification = async (orderData, emailType = 'customer') => {
-    try {
-      // Prepare email data
-      const emailData = {
-        to: emailType === 'admin' ? 'yousef.hatem.developer@gmail.com' : orderData.customer_email,
-        subject: emailType === 'admin' ? 'New Order Received - Sportswear Store' : 'Order Confirmation - Sportswear Store',
-        order_details: {
-          order_number: orderData.order_number || `ORD${Date.now()}`,
-          customer_name: orderData.customer_name,
-          customer_email: orderData.customer_email,
-          total_amount: orderData.total_amount,
-          shipping_address: orderData.shipping_address,
-          shipping_city: orderData.shipping_city,
-          shipping_phone: orderData.shipping_phone,
-          payment_method: orderData.payment_method,
-          order_date: new Date().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          items: orderData.items || []
-        }
-      };
-
-      // Log the email data (you can replace this with actual email sending)
-      console.log(`Email would be sent to: ${emailData.to}`);
-      console.log('Email data:', emailData);
-
-      // If you have a backend API endpoint for sending emails, uncomment and use this:
-      /*
-      const response = await fetch('https://your-backend.com/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(emailData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send email');
-      }
-      */
-
-      return { success: true, message: 'Email notification prepared' };
-    } catch (error) {
-      console.error('Error preparing email:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
   const createOrder = async (shippingAddress) => {
     try {
       setLoading(true)
@@ -142,6 +132,10 @@ export default function Checkout() {
       if (!user) {
         throw new Error('User not authenticated')
       }
+
+      // Get selected shipping cost
+      const selectedShipping = shippingCosts.find(g => g.governorate === selectedGovernorate)
+      const shippingCost = selectedShipping ? selectedShipping.cost : 50.00
 
       // Generate order number
       const orderNumber = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -152,6 +146,7 @@ export default function Checkout() {
         customer_email: formik.values.email,
         shipping_address: shippingAddress.details,
         shipping_city: shippingAddress.city,
+        shipping_governorate: selectedGovernorate,
         shipping_phone: shippingAddress.phone,
         payment_method: paymentMethod,
         items: cartItems.map(item => ({
@@ -163,7 +158,7 @@ export default function Checkout() {
         order_number: orderNumber,
         total_amount: total,
         subtotal: subtotal,
-        shipping_cost: shipping,
+        shipping_cost: shippingCost,
         tax_amount: tax
       }
 
@@ -178,9 +173,10 @@ export default function Checkout() {
           total_amount: total,
           shipping_address: orderData.shipping_address,
           shipping_city: orderData.shipping_city,
+          shipping_governorate: orderData.shipping_governorate,
           shipping_phone: orderData.shipping_phone,
           payment_method: orderData.payment_method,
-          shipping_cost: shipping,
+          shipping_cost: shippingCost,
           tax_amount: tax,
           status: 'Pending'
         }])
@@ -204,7 +200,7 @@ export default function Checkout() {
 
       if (itemsError) throw itemsError
 
-      // 3. Update product sales count using a simpler approach
+      // 3. Update product sales count
       for (const item of cartItems) {
         try {
           // First get current sales count
@@ -236,14 +232,7 @@ export default function Checkout() {
 
       if (clearCartError) console.error('Error clearing cart:', clearCartError)
 
-      // 5. Send email notifications
-      // Send to customer
-      await sendOrderNotification(orderData, 'customer')
-
-      // Send to admin (you)
-      await sendOrderNotification(orderData, 'admin')
-
-      // 6. Clear localStorage cart
+      // 5. Clear localStorage cart
       localStorage.removeItem('checkout_cart')
 
       toast.success('Order placed successfully! You will receive a confirmation email shortly.')
@@ -293,6 +282,11 @@ export default function Checkout() {
     },
     validationSchema,
     onSubmit: async (values) => {
+      if (!selectedGovernorate) {
+        toast.error('Please select a governorate')
+        return
+      }
+
       const shippingAddress = {
         details: values.details,
         phone: values.phone,
@@ -492,11 +486,49 @@ export default function Checkout() {
                     )}
                   </div>
 
+                  {/* Governorate Selection */}
+                  <div className="space-y-2">
+                    <label htmlFor="governorate" className="block text-sm font-semibold text-gray-700">
+                      Governorate *
+                    </label>
+                    <select
+                      id="governorate"
+                      value={selectedGovernorate}
+                      onChange={(e) => setSelectedGovernorate(e.target.value)}
+                      required
+                      className="w-full px-5 py-4 border-2 rounded-2xl transition-all duration-300 text-gray-700 bg-white/70 backdrop-blur-sm border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 hover:border-gray-300 focus:outline-none"
+                    >
+                      <option value="">Select your governorate</option>
+                      {shippingCosts.map((governorate) => (
+                        <option key={governorate.id} value={governorate.governorate}>
+                          {governorate.governorate} - EGP {governorate.cost.toFixed(2)} ({governorate.delivery_days} days)
+                        </option>
+                      ))}
+                    </select>
+                    {selectedGovernorate && shippingCosts.find(g => g.governorate === selectedGovernorate) && (
+                      <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-blue-800">
+                              Shipping to {selectedGovernorate}
+                            </p>
+                            <p className="text-xs text-blue-600">
+                              Delivery within {shippingCosts.find(g => g.governorate === selectedGovernorate).delivery_days} days
+                            </p>
+                          </div>
+                          <div className="text-blue-700 font-bold">
+                            EGP {shippingCosts.find(g => g.governorate === selectedGovernorate).cost.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* City */}
                     <div className="space-y-2">
                       <label htmlFor="city" className="block text-sm font-semibold text-gray-700">
-                        City *
+                        City/District *
                       </label>
                       <input
                         type="text"
@@ -509,7 +541,7 @@ export default function Checkout() {
                           ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100'
                           : 'border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 hover:border-gray-300'
                           } focus:outline-none placeholder-gray-400`}
-                        placeholder="Enter your city"
+                        placeholder="Enter your city or district"
                       />
                       {formik.touched.city && formik.errors.city && (
                         <p className="text-red-500 text-sm flex items-center gap-1">
@@ -522,7 +554,7 @@ export default function Checkout() {
                     {/* Phone */}
                     <div className="space-y-2">
                       <label htmlFor="phone" className="block text-sm font-semibold text-gray-700">
-                        Phone Number *
+                        Phone Number (Egyptian) *
                       </label>
                       <input
                         type="tel"
@@ -535,7 +567,7 @@ export default function Checkout() {
                           ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100'
                           : 'border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 hover:border-gray-300'
                           } focus:outline-none placeholder-gray-400`}
-                        placeholder="+1 (555) 123-4567"
+                        placeholder="01XXXXXXXXX"
                       />
                       {formik.touched.phone && formik.errors.phone && (
                         <p className="text-red-500 text-sm flex items-center gap-1">
@@ -543,6 +575,7 @@ export default function Checkout() {
                           {formik.errors.phone}
                         </p>
                       )}
+                      <p className="text-xs text-gray-500">Must be an Egyptian number starting with 01 (11 digits)</p>
                     </div>
                   </div>
                 </div>
@@ -661,8 +694,8 @@ export default function Checkout() {
                       <p className="text-sm text-gray-600 mt-1">Quantity: {item.count}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-gray-900">${(item.price * item.count).toFixed(2)}</p>
-                      <p className="text-xs text-gray-500">${item.price.toFixed(2)} each</p>
+                      <p className="font-bold text-gray-900">EGP {(item.price * item.count).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">EGP {item.price.toFixed(2)} each</p>
                     </div>
                   </div>
                 ))}
@@ -675,25 +708,25 @@ export default function Checkout() {
                     <i className="fas fa-shopping-cart text-sm"></i>
                     Subtotal
                   </span>
-                  <span className="font-medium">${subtotal.toFixed(2)}</span>
+                  <span className="font-medium">EGP {subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span className="flex items-center gap-2">
                     <i className="fas fa-truck text-sm"></i>
                     Shipping
                   </span>
-                  <span className="font-medium">${shipping.toFixed(2)}</span>
+                  <span className="font-medium">EGP {shipping.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span className="flex items-center gap-2">
                     <i className="fas fa-receipt text-sm"></i>
                     Tax (10%)
                   </span>
-                  <span className="font-medium">${tax.toFixed(2)}</span>
+                  <span className="font-medium">EGP {tax.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold text-gray-900 pt-4 border-t border-gray-200">
                   <span>Total</span>
-                  <span className="bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">${total.toFixed(2)}</span>
+                  <span className="bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">EGP {total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -701,8 +734,8 @@ export default function Checkout() {
               <button
                 type="button"
                 onClick={formik.handleSubmit}
-                disabled={loading || !formik.isValid}
-                className={`w-full py-5 px-6 rounded-2xl font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500/20 shadow-lg ${loading || !formik.isValid
+                disabled={loading || !formik.isValid || !selectedGovernorate}
+                className={`w-full py-5 px-6 rounded-2xl font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500/20 shadow-lg ${loading || !formik.isValid || !selectedGovernorate
                   ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 hover:scale-105 hover:shadow-xl'
                   }`}
@@ -730,7 +763,7 @@ export default function Checkout() {
                 <div className="flex items-center justify-center gap-6 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
                     <i className="fas fa-truck"></i>
-                    Free Returns
+                    Fast Delivery
                   </span>
                   <span className="flex items-center gap-1">
                     <i className="fas fa-headset"></i>
@@ -763,6 +796,10 @@ export default function Checkout() {
           }
           .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
+          }
+          .font-arabic {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
           }
         `}
       </style>

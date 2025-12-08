@@ -358,11 +358,11 @@ export default function OrderDetails() {
                                                 <p className="text-sm text-gray-500">{item.products?.category || 'Uncategorized'}</p>
                                                 <div className="flex items-center gap-4 mt-2">
                                                     <span className="text-gray-600">Qty: {item.quantity}</span>
-                                                    <span className="text-gray-600">Price: ${item.price.toFixed(2)}</span>
+                                                    <span className="text-gray-600">Price: EGP {item.price.toFixed(2)}</span>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-gray-900">${(item.price * item.quantity).toFixed(2)}</p>
+                                                <p className="font-bold text-gray-900">EGP {(item.price * item.quantity).toFixed(2)}</p>
                                                 <p className="text-sm text-gray-500">Subtotal</p>
                                             </div>
                                         </div>
@@ -375,19 +375,19 @@ export default function OrderDetails() {
                                 <div className="space-y-3">
                                     <div className="flex justify-between text-gray-600">
                                         <span>Subtotal</span>
-                                        <span>${subtotal.toFixed(2)}</span>
+                                        <span>EGP {subtotal.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-gray-600">
                                         <span>Shipping</span>
-                                        <span>${shipping.toFixed(2)}</span>
+                                        <span>EGP {shipping.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-gray-600">
                                         <span>Tax</span>
-                                        <span>${tax.toFixed(2)}</span>
+                                        <span>EGP {tax.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-lg font-bold text-gray-900 pt-3 border-t border-gray-200">
                                         <span>Total</span>
-                                        <span>${total.toFixed(2)}</span>
+                                        <span>EGP {total.toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -500,7 +500,7 @@ export default function OrderDetails() {
                                         <FaDollarSign className="text-gray-400" />
                                         <div>
                                             <p className="text-sm text-gray-500">Shipping Cost</p>
-                                            <p className="font-medium">${(order.shipping_cost || 0).toFixed(2)}</p>
+                                            <p className="font-medium">EGP {(order.shipping_cost || 0).toFixed(2)}</p>
                                         </div>
                                     </div>
 
@@ -508,7 +508,7 @@ export default function OrderDetails() {
                                         <FaDollarSign className="text-gray-400" />
                                         <div>
                                             <p className="text-sm text-gray-500">Tax Amount</p>
-                                            <p className="font-medium">${(order.tax_amount || 0).toFixed(2)}</p>
+                                            <p className="font-medium">EGP {(order.tax_amount || 0).toFixed(2)}</p>
                                         </div>
                                     </div>
                                 </div>

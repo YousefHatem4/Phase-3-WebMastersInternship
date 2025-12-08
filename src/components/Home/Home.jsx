@@ -310,7 +310,7 @@ export default function Home() {
                 </div>
             </header>
 
-         
+
 
             {/* Products Section */}
             <section className='my-10 px-4 sm:px-6 lg:px-30'>
@@ -374,7 +374,7 @@ export default function Home() {
                                             </h3>
 
                                             <div className="flex justify-between items-center mt-2">
-                                                <span className="text-blue-600 font-bold text-xs sm:text-sm">${parseFloat(product.price).toFixed(2)}</span>
+                                                <span className="text-blue-600 font-bold text-xs sm:text-sm">EGP {parseFloat(product.price).toFixed(2)}</span>
                                                 <div className="flex items-center text-amber-500 text-xs sm:text-sm">
                                                     <i className="fas fa-star mr-1"></i>
                                                     {product.ratingsAverage || 4.5}
@@ -585,7 +585,7 @@ export default function Home() {
                                     FREE AND FAST DELIVERY
                                 </h3>
                                 <p className='text-gray-600 text-sm leading-relaxed'>
-                                    Free delivery for all orders over $140
+                                    Free delivery for all orders over EGP 140
                                 </p>
                             </div>
 
@@ -685,7 +685,7 @@ export default function Home() {
                             <i className="fas fa-users bg-gradient-to-r from-blue-500 to-teal-500 bg-clip-text text-transparent"></i>
                             <span>10k+ Happy Customers</span>
                         </div>
-                        <div className='w-px h-4 bg-gradient-to-b from-blue-200 to-teal-200'></div>
+                        <div className="w-px h-4 bg-gradient-to-b from-blue-200 to-teal-200"></div>
                         <div className="flex items-center gap-2">
                             <i className="fas fa-award bg-gradient-to-r from-blue-500 to-teal-500 bg-clip-text text-transparent"></i>
                             <span>Premium Quality</span>
