@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
 import toast from 'react-hot-toast'
@@ -15,15 +15,18 @@ import {
     FaCalendar,
     FaIdCard,
     FaShoppingBag,
-    FaDollarSign,
     FaBox,
     FaCheckCircle,
     FaExclamationTriangle,
     FaTimesCircle,
     FaShippingFast,
     FaCheck,
-    FaUser
+    FaUser,
+    FaSave,
+    FaSpinner
 } from 'react-icons/fa'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 export default function OrderDetails() {
     const { orderId } = useParams()
@@ -33,6 +36,10 @@ export default function OrderDetails() {
     const [customer, setCustomer] = useState(null)
     const [loading, setLoading] = useState(true)
     const [updatingStatus, setUpdatingStatus] = useState(false)
+    const [exportingPDF, setExportingPDF] = useState(false)
+    const [savingNotes, setSavingNotes] = useState(false)
+    const [notes, setNotes] = useState('')
+    const printRef = useRef()
 
     useEffect(() => {
         document.title = 'Order Details - Admin Panel'
@@ -86,6 +93,11 @@ export default function OrderDetails() {
             setCustomer(customerData)
             setOrderItems(itemsData || [])
 
+            // Set notes from order data
+            if (orderData.notes) {
+                setNotes(orderData.notes)
+            }
+
         } catch (error) {
             console.error('Error fetching order details:', error)
             toast.error('Failed to load order details')
@@ -116,6 +128,32 @@ export default function OrderDetails() {
             toast.error('Failed to update order status')
         } finally {
             setUpdatingStatus(false)
+        }
+    }
+
+    const saveNotes = async () => {
+        try {
+            setSavingNotes(true)
+
+            const { error } = await supabase
+                .from('orders')
+                .update({
+                    notes: notes,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', orderId)
+
+            if (error) throw error
+
+            // Update local state
+            setOrder({ ...order, notes: notes })
+            toast.success('Notes saved successfully!')
+
+        } catch (error) {
+            console.error('Error saving notes:', error)
+            toast.error('Failed to save notes')
+        } finally {
+            setSavingNotes(false)
         }
     }
 
@@ -166,10 +204,9 @@ export default function OrderDetails() {
     const calculateOrderTotals = () => {
         const subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
         const shipping = order?.shipping_cost || 0
-        const tax = order?.tax_amount || 0
         const total = order?.total_amount || 0
 
-        return { subtotal, shipping, tax, total }
+        return { subtotal, shipping, total }
     }
 
     const handlePrint = () => {
@@ -180,7 +217,148 @@ export default function OrderDetails() {
         navigate('/admin?tab=orders')
     }
 
-    const { subtotal, shipping, tax, total } = calculateOrderTotals()
+    const exportToPDF = async () => {
+        try {
+            setExportingPDF(true)
+
+            // Create a temporary div for PDF generation
+            const printContent = document.createElement('div')
+            printContent.className = 'print-pdf-content'
+            printContent.style.padding = '20px'
+            printContent.style.backgroundColor = 'white'
+            printContent.style.maxWidth = '800px'
+            printContent.style.margin = '0 auto'
+
+            const { subtotal, shipping, total } = calculateOrderTotals()
+
+            // Build PDF content
+            printContent.innerHTML = `
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3b82f6; padding-bottom: 20px;">
+                    <h1 style="color: #3b82f6; font-size: 28px; margin-bottom: 10px;">Sportswear Store</h1>
+                    <p style="color: #6b7280; font-size: 16px;">Order Invoice</p>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+                    <div>
+                        <h2 style="color: #1f2937; font-size: 22px; margin-bottom: 10px;">Order Details</h2>
+                        <p style="color: #6b7280; margin: 5px 0;"><strong>Order #:</strong> ${order.order_number}</p>
+                        <p style="color: #6b7280; margin: 5px 0;"><strong>Date:</strong> ${formatDate(order.created_at)}</p>
+                        <p style="color: #6b7280; margin: 5px 0;"><strong>Status:</strong> ${order.status}</p>
+                        <p style="color: #6b7280; margin: 5px 0;"><strong>Payment Method:</strong> ${order.payment_method}</p>
+                        ${order.notes ? `<p style="color: #6b7280; margin: 5px 0;"><strong>Notes:</strong> ${order.notes}</p>` : ''}
+                    </div>
+                    <div style="text-align: right;">
+                        <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 10px;">Sportswear Store</h3>
+                        <p style="color: #6b7280; margin: 5px 0;">123 Sports Street</p>
+                        <p style="color: #6b7280; margin: 5px 0;">Cairo, Egypt</p>
+                        <p style="color: #6b7280; margin: 5px 0;">info@sportswearstore.com</p>
+                        <p style="color: #6b7280; margin: 5px 0;">+20 123 456 7890</p>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div>
+                            <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 10px;">Customer Information</h3>
+                            <p style="color: #6b7280; margin: 5px 0;"><strong>Name:</strong> ${order.customer_name}</p>
+                            <p style="color: #6b7280; margin: 5px 0;"><strong>Email:</strong> ${order.customer_email}</p>
+                            ${order.shipping_phone ? `<p style="color: #6b7280; margin: 5px 0;"><strong>Phone:</strong> ${order.shipping_phone}</p>` : ''}
+                        </div>
+                        <div style="text-align: right;">
+                            <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 10px;">Shipping Address</h3>
+                            <p style="color: #6b7280; margin: 5px 0;">${order.shipping_address}</p>
+                            <p style="color: #6b7280; margin: 5px 0;">${order.shipping_city}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Order Items</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background-color: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                <th style="text-align: left; padding: 12px; color: #374151; font-weight: 600;">Item</th>
+                                <th style="text-align: center; padding: 12px; color: #374151; font-weight: 600;">Quantity</th>
+                                <th style="text-align: right; padding: 12px; color: #374151; font-weight: 600;">Price</th>
+                                <th style="text-align: right; padding: 12px; color: #374151; font-weight: 600;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${orderItems.map(item => `
+                                <tr style="border-bottom: 1px solid #e5e7eb;">
+                                    <td style="padding: 12px; color: #1f2937;">
+                                        <div style="font-weight: 500;">${item.product_title}</div>
+                                        <div style="color: #6b7280; font-size: 14px;">${item.products?.category || 'Uncategorized'}</div>
+                                    </td>
+                                    <td style="text-align: center; padding: 12px; color: #1f2937;">${item.quantity}</td>
+                                    <td style="text-align: right; padding: 12px; color: #1f2937;">EGP ${item.price.toFixed(2)}</td>
+                                    <td style="text-align: right; padding: 12px; color: #1f2937; font-weight: 500;">EGP ${(item.price * item.quantity).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-bottom: 30px; border-top: 2px solid #e5e7eb; padding-top: 20px;">
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div style="width: 300px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span style="color: #6b7280;">Subtotal:</span>
+                                <span style="color: #1f2937; font-weight: 500;">EGP ${subtotal.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span style="color: #6b7280;">Shipping:</span>
+                                <span style="color: #1f2937; font-weight: 500;">EGP ${shipping.toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                                <span style="color: #1f2937; font-size: 18px; font-weight: 700;">Total:</span>
+                                <span style="color: #3b82f6; font-size: 18px; font-weight: 700;">EGP ${total.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 14px;">
+                    <p>Thank you for your business!</p>
+                    <p>If you have any questions about this invoice, please contact our support team.</p>
+                    <p style="margin-top: 20px;">Sportswear Store • www.sportswearstore.com • +20 123 456 7890</p>
+                </div>
+            `
+
+            // Add to document
+            document.body.appendChild(printContent)
+
+            // Generate canvas from HTML
+            const canvas = await html2canvas(printContent, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff'
+            })
+
+            // Create PDF
+            const imgData = canvas.toDataURL('image/png')
+            const pdf = new jsPDF('p', 'mm', 'a4')
+            const imgWidth = 210 // A4 width in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+            pdf.save(`Order_${order.order_number}.pdf`)
+
+            // Clean up
+            document.body.removeChild(printContent)
+
+            toast.success('Order exported to PDF successfully!')
+
+        } catch (error) {
+            console.error('Error exporting to PDF:', error)
+            toast.error('Failed to export to PDF')
+        } finally {
+            setExportingPDF(false)
+        }
+    }
+
+    const { subtotal, shipping, total } = calculateOrderTotals()
 
     if (loading) {
         return (
@@ -212,7 +390,7 @@ export default function OrderDetails() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-teal-50/30 py-8">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50/30 to-teal-50/30 py-8" ref={printRef}>
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 {/* Header */}
                 <motion.div
@@ -223,7 +401,7 @@ export default function OrderDetails() {
                     <div>
                         <button
                             onClick={handleGoBack}
-                            className="flex items-center gap-2 text-blue-500 hover:text-blue-600 mb-4"
+                            className="flex items-center gap-2 text-blue-500 hover:text-blue-600 mb-4 no-print"
                         >
                             <FaArrowLeft /> Back to Orders
                         </button>
@@ -231,15 +409,28 @@ export default function OrderDetails() {
                         <p className="text-gray-600">Order #{order.order_number}</p>
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 no-print">
                         <button
                             onClick={handlePrint}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
                         >
                             <FaPrint /> Print
                         </button>
-                        <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition">
-                            <FaDownload /> Export
+                        <button
+                            onClick={exportToPDF}
+                            disabled={exportingPDF}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {exportingPDF ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    Exporting...
+                                </>
+                            ) : (
+                                <>
+                                    <FaDownload /> Export PDF
+                                </>
+                            )}
                         </button>
                     </div>
                 </motion.div>
@@ -253,7 +444,7 @@ export default function OrderDetails() {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.1 }}
-                            className="bg-white rounded-2xl shadow-lg p-6"
+                            className="bg-white rounded-2xl shadow-lg p-6 print-container"
                         >
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                                 <div>
@@ -269,7 +460,7 @@ export default function OrderDetails() {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 no-print">
                                     <select
                                         value={order.status}
                                         onChange={(e) => updateOrderStatus(e.target.value)}
@@ -289,7 +480,7 @@ export default function OrderDetails() {
                             </div>
 
                             {/* Status Timeline */}
-                            <div className="relative">
+                            <div className="relative no-print">
                                 <div className="absolute left-0 top-0 h-full w-0.5 bg-gray-200"></div>
                                 {[
                                     { status: 'Pending', icon: <FaExclamationTriangle /> },
@@ -331,7 +522,7 @@ export default function OrderDetails() {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.2 }}
-                            className="bg-white rounded-2xl shadow-lg overflow-hidden"
+                            className="bg-white rounded-2xl shadow-lg overflow-hidden print-container"
                         >
                             <div className="p-6 border-b border-gray-100">
                                 <h2 className="text-xl font-bold text-gray-900">Order Items</h2>
@@ -351,7 +542,7 @@ export default function OrderDetails() {
                                             <img
                                                 src={item.products?.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop'}
                                                 alt={item.product_title}
-                                                className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+                                                className="w-20 h-20 object-cover rounded-lg border border-gray-200 no-print"
                                             />
                                             <div className="flex-1">
                                                 <h4 className="font-medium text-gray-900">{item.product_title}</h4>
@@ -381,13 +572,9 @@ export default function OrderDetails() {
                                         <span>Shipping</span>
                                         <span>EGP {shipping.toFixed(2)}</span>
                                     </div>
-                                    <div className="flex justify-between text-gray-600">
-                                        <span>Tax</span>
-                                        <span>EGP {tax.toFixed(2)}</span>
-                                    </div>
                                     <div className="flex justify-between text-lg font-bold text-gray-900 pt-3 border-t border-gray-200">
                                         <span>Total</span>
-                                        <span>EGP {total.toFixed(2)}</span>
+                                        <span className="text-blue-600">EGP {total.toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -401,13 +588,13 @@ export default function OrderDetails() {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.1 }}
-                            className="bg-white rounded-2xl shadow-lg p-6"
+                            className="bg-white rounded-2xl shadow-lg p-6 print-container"
                         >
                             <h2 className="text-xl font-bold text-gray-900 mb-6">Customer Information</h2>
 
                             <div className="space-y-4">
                                 <div className="flex items-start gap-3">
-                                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg no-print">
                                         {order.customer_name?.charAt(0) || customer?.full_name?.charAt(0) || 'C'}
                                     </div>
                                     <div>
@@ -473,7 +660,7 @@ export default function OrderDetails() {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.2 }}
-                            className="bg-white rounded-2xl shadow-lg p-6"
+                            className="bg-white rounded-2xl shadow-lg p-6 print-container"
                         >
                             <h2 className="text-xl font-bold text-gray-900 mb-6">Shipping Information</h2>
 
@@ -497,18 +684,10 @@ export default function OrderDetails() {
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        <FaDollarSign className="text-gray-400" />
+                                        <FaTruck className="text-gray-400" />
                                         <div>
                                             <p className="text-sm text-gray-500">Shipping Cost</p>
                                             <p className="font-medium">EGP {(order.shipping_cost || 0).toFixed(2)}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-3">
-                                        <FaDollarSign className="text-gray-400" />
-                                        <div>
-                                            <p className="text-sm text-gray-500">Tax Amount</p>
-                                            <p className="font-medium">EGP {(order.tax_amount || 0).toFixed(2)}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -520,7 +699,7 @@ export default function OrderDetails() {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.3 }}
-                            className="bg-white rounded-2xl shadow-lg p-6"
+                            className="bg-white rounded-2xl shadow-lg p-6 print-container"
                         >
                             <h2 className="text-xl font-bold text-gray-900 mb-6">Order Information</h2>
 
@@ -571,27 +750,20 @@ export default function OrderDetails() {
                             </div>
                         </motion.div>
 
-                        {/* Actions */}
-                        <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.4 }}
-                            className="bg-gradient-to-r from-blue-500 to-teal-500 rounded-2xl shadow-lg p-6 text-white"
-                        >
-                            <h2 className="text-xl font-bold mb-6">Quick Actions</h2>
-
-                            <div className="space-y-3">
-                                <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition">
-                                    <FaEnvelope /> Send Invoice
-                                </button>
-                                <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition">
-                                    <FaPhone /> Contact Customer
-                                </button>
-                                <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition">
-                                    <FaTruck /> Track Shipment
-                                </button>
-                            </div>
-                        </motion.div>
+                        {/* Notes Preview (Print Only) */}
+                        {order.notes && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.4 }}
+                                className="bg-white rounded-2xl shadow-lg p-6 print-only"
+                            >
+                                <h2 className="text-xl font-bold text-gray-900 mb-4">Order Notes</h2>
+                                <div className="p-3 bg-gray-50 rounded-lg">
+                                    <p className="text-gray-700 whitespace-pre-wrap">{order.notes}</p>
+                                </div>
+                            </motion.div>
+                        )}
                     </div>
                 </div>
 
@@ -600,56 +772,246 @@ export default function OrderDetails() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5 }}
-                    className="mt-8 bg-white rounded-2xl shadow-lg p-6"
+                    className="mt-8 bg-white rounded-2xl shadow-lg p-6 no-print"
                 >
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Order Notes</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-900">Order Notes</h2>
+                        {order.notes && (
+                            <span className="text-sm text-gray-500">
+                                Last updated: {formatDate(order.updated_at)}
+                            </span>
+                        )}
+                    </div>
+
                     <textarea
-                        placeholder="Add notes about this order..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
-                        defaultValue={order.notes || ''}
-                        onChange={(e) => {
-                            // You can implement saving notes functionality here
-                        }}
+                        placeholder="Add notes about this order (e.g., special instructions, customer requests, issues, etc.)..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px]"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
                     />
-                    <div className="flex justify-end mt-4">
-                        <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
-                            Save Notes
-                        </button>
+
+                    <div className="flex justify-end items-center mt-4">
+                       
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setNotes('')}
+                                disabled={savingNotes || notes.length === 0}
+                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Clear
+                            </button>
+                            <button
+                                onClick={saveNotes}
+                                disabled={savingNotes || notes === order.notes}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {savingNotes ? (
+                                    <>
+                                        <FaSpinner className="animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FaSave />
+                                        Save Notes
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </motion.div>
             </div>
 
-            {/* Print Styles */}
+            {/* Print Styles - FIXED: Removed page numbers */}
             <style>
                 {`
           @media print {
+            /* Hide non-printable elements */
             .no-print {
               display: none !important;
             }
             
-            body {
-              background: white !important;
+            /* Show print-only elements */
+            .print-only {
+              display: block !important;
             }
             
-            .bg-gradient-to-br {
+            /* Reset background colors */
+            body, .bg-gradient-to-br, .min-h-screen {
               background: white !important;
+              color: black !important;
             }
             
+            /* Remove shadows and rounded corners for print */
             .shadow-lg {
               box-shadow: none !important;
             }
             
-            .rounded-2xl {
+            .rounded-2xl, .rounded-lg {
               border-radius: 0 !important;
             }
             
-            button, select {
+            /* Hide interactive elements */
+            button, select, textarea, input, .no-print {
               display: none !important;
             }
             
-            .border {
+            /* Ensure borders are visible */
+            .border, .border-t, .border-b {
               border: 1px solid #e5e7eb !important;
             }
+            
+            /* Remove all margins and padding from body */
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            
+            /* Prevent page breaks inside important elements */
+            .print-container {
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            
+            /* Main content container */
+            .max-w-6xl {
+              max-width: 100% !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            
+            /* Grid layout for print */
+            .grid {
+              display: block !important;
+            }
+            
+            .lg\\:col-span-2 {
+              width: 100% !important;
+              float: none !important;
+              margin: 0 0 20px 0 !important;
+            }
+            
+            .lg\\:col-span-3 {
+              width: 100% !important;
+              float: none !important;
+            }
+            
+            /* Spacing between sections */
+            .space-y-8 > * + * {
+              margin-top: 20px !important;
+            }
+            
+            /* Font sizes for print */
+            .text-3xl { font-size: 24px !important; }
+            .text-xl { font-size: 18px !important; }
+            .text-lg { font-size: 16px !important; }
+            
+            /* Hide images that shouldn't print */
+            img.no-print {
+              display: none !important;
+            }
+            
+            /* Status badges - make them print-friendly */
+            .bg-yellow-100, .bg-blue-100, .bg-green-100, .bg-red-100, .bg-purple-100 {
+              background-color: #f3f4f6 !important;
+              color: black !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            
+            /* Color adjustments for print */
+            .text-blue-600, .text-gray-900 {
+              color: black !important;
+            }
+            
+            .text-gray-600, .text-gray-500 {
+              color: #4b5563 !important;
+            }
+            
+            /* Print-specific page setup */
+            @page {
+              margin: 15mm;
+              size: A4;
+              /* Remove page numbers */
+              counter-reset: page;
+            }
+            
+            /* Remove page numbers from all pages */
+            @page :first {
+              margin-top: 15mm;
+            }
+            
+            @page :left {
+              margin-left: 15mm;
+              margin-right: 15mm;
+            }
+            
+            @page :right {
+              margin-left: 15mm;
+              margin-right: 15mm;
+            }
+            
+            /* Completely hide any browser-generated page numbers */
+            body::after, html::after, .page-number, .page-count {
+              display: none !important;
+              content: none !important;
+            }
+            
+            /* Hide any footer that might contain page numbers */
+            footer, .footer, .print-footer {
+              display: none !important;
+            }
+            
+            /* Adjust spacing for print */
+            .py-8 {
+              padding-top: 0 !important;
+              padding-bottom: 0 !important;
+            }
+            
+            .p-6 {
+              padding: 12px !important;
+            }
+            
+            .mb-8 {
+              margin-bottom: 12px !important;
+            }
+            
+            /* Timeline for print */
+            .relative.pl-8 {
+              padding-left: 20px !important;
+            }
+            
+            .absolute.-left-3 {
+              left: 0 !important;
+            }
+            
+            /* Ensure proper page breaks */
+            h1, h2, h3 {
+              page-break-after: avoid;
+            }
+            
+            table {
+              page-break-inside: auto;
+            }
+            
+            tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+            
+            thead {
+              display: table-header-group;
+            }
+            
+            tfoot {
+              display: table-footer-group;
+            }
+          }
+          
+          /* Hide print-only elements on screen */
+          .print-only {
+            display: none;
           }
         `}
             </style>

@@ -8,12 +8,10 @@ import { supabase } from '../../supabaseClient';
 export default function Checkout() {
   const [apiError, setApiError] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState('cash')
   const [cartItems, setCartItems] = useState([])
   const [user, setUser] = useState(null)
   const [subtotal, setSubtotal] = useState(0)
   const [shipping, setShipping] = useState(0)
-  const [tax, setTax] = useState(0)
   const [total, setTotal] = useState(0)
   const [shippingCosts, setShippingCosts] = useState([])
   const [selectedGovernorate, setSelectedGovernorate] = useState('')
@@ -73,13 +71,11 @@ export default function Checkout() {
         if (cartData.products && cartData.products.length > 0) {
           setCartItems(cartData.products)
 
-          // Calculate subtotal and tax (shipping will be calculated separately)
+          // Calculate subtotal (no tax)
           const calculatedSubtotal = cartData.products.reduce((total, item) =>
             total + (item.price * item.count), 0)
-          const calculatedTax = calculatedSubtotal * 0.1
 
           setSubtotal(calculatedSubtotal)
-          setTax(calculatedTax)
         } else {
           navigate('/cart')
         }
@@ -98,7 +94,8 @@ export default function Checkout() {
     const selectedShipping = shippingCosts.find(g => g.governorate === selectedGovernorate)
     const shippingCost = selectedShipping ? selectedShipping.cost : 50.00 // Default cost
 
-    const calculatedTotal = subtotal + shippingCost + tax
+    // Calculate total (no tax)
+    const calculatedTotal = subtotal + shippingCost
 
     setShipping(shippingCost)
     setTotal(calculatedTotal)
@@ -148,7 +145,7 @@ export default function Checkout() {
         shipping_city: shippingAddress.city,
         shipping_governorate: selectedGovernorate,
         shipping_phone: shippingAddress.phone,
-        payment_method: paymentMethod,
+        payment_method: 'cash', // Always cash on delivery
         items: cartItems.map(item => ({
           product_title: item.product.title,
           quantity: item.count,
@@ -158,8 +155,7 @@ export default function Checkout() {
         order_number: orderNumber,
         total_amount: total,
         subtotal: subtotal,
-        shipping_cost: shippingCost,
-        tax_amount: tax
+        shipping_cost: shippingCost
       }
 
       // 1. Create order in database
@@ -177,7 +173,6 @@ export default function Checkout() {
           shipping_phone: orderData.shipping_phone,
           payment_method: orderData.payment_method,
           shipping_cost: shippingCost,
-          tax_amount: tax,
           status: 'Pending'
         }])
         .select()
@@ -248,29 +243,6 @@ export default function Checkout() {
     }
   }
 
-  const OnlinePayment = async (shippingAddress) => {
-    try {
-      setLoading(true);
-
-      // First create the order
-      await createOrder(shippingAddress)
-
-      // Simulate online payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      toast.success('Payment processed successfully!');
-
-    } catch (err) {
-      console.log('Payment error:', err);
-      setApiError('Payment failed. Please try again.');
-      setLoading(false);
-    }
-  }
-
-  const CashPayment = async (shippingAddress) => {
-    await createOrder(shippingAddress)
-  }
-
   const formik = useFormik({
     initialValues: {
       firstName: '',
@@ -293,11 +265,7 @@ export default function Checkout() {
         city: values.city
       };
 
-      if (paymentMethod === 'online') {
-        await OnlinePayment(shippingAddress);
-      } else {
-        await CashPayment(shippingAddress);
-      }
+      await createOrder(shippingAddress);
     }
   })
 
@@ -581,74 +549,54 @@ export default function Checkout() {
                 </div>
               </div>
 
-              {/* Payment Method */}
+              {/* Payment Method - Cash on Delivery Only */}
               <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/50 p-8 lg:p-10 hover:shadow-xl transition-all duration-500">
                 <div className="flex items-center gap-4 mb-8">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg">
-                    <i className="fas fa-credit-card text-white text-lg"></i>
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg">
+                    <i className="fas fa-money-bill-wave text-white text-lg"></i>
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Payment Method</h2>
-                    <p className="text-gray-600">Choose how you'd like to pay</p>
+                    <p className="text-gray-600">Pay when you receive your order</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Cash Payment */}
-                  <label className="cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="cash"
-                      checked={paymentMethod === 'cash'}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="sr-only"
-                    />
-                    <div className={`p-6 rounded-2xl border-2 transition-all duration-300 group-hover:scale-[1.02] ${paymentMethod === 'cash'
-                      ? 'border-blue-500 bg-gradient-to-br from-blue-500/10 to-blue-500/5 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 bg-white/50'
-                      }`}>
-                      <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors duration-300 ${paymentMethod === 'cash' ? 'bg-green-100' : 'bg-gray-100'
-                          }`}>
-                          <i className="fas fa-money-bill-wave text-2xl text-green-600"></i>
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-lg">Cash on Delivery</h3>
-                          <p className="text-sm text-gray-600 mt-1">Pay when you receive your order</p>
-                          <p className="text-xs text-green-600 mt-2 font-medium">✓ No additional fees</p>
-                        </div>
+                <div className="p-6 rounded-2xl border-2 border-green-500 bg-gradient-to-br from-green-500/10 to-green-500/5 shadow-lg">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-green-100">
+                      <i className="fas fa-money-bill-wave text-2xl text-green-600"></i>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-lg">Cash on Delivery</h3>
+                      <p className="text-sm text-gray-600 mt-1">Pay when you receive your order</p>
+                      <div className="flex items-center gap-3 mt-3">
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <i className="fas fa-check-circle"></i>
+                          No additional fees
+                        </p>
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <i className="fas fa-check-circle"></i>
+                          Safe and convenient
+                        </p>
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <i className="fas fa-check-circle"></i>
+                          Available everywhere in Egypt
+                        </p>
                       </div>
                     </div>
-                  </label>
+                  </div>
+                </div>
 
-                  {/* Online Payment */}
-                  <label className="cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="online"
-                      checked={paymentMethod === 'online'}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="sr-only"
-                    />
-                    <div className={`p-6 rounded-2xl border-2 transition-all duration-300 group-hover:scale-[1.02] ${paymentMethod === 'online'
-                      ? 'border-blue-500 bg-gradient-to-br from-blue-500/10 to-blue-500/5 shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300 bg-white/50'
-                      }`}>
-                      <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors duration-300 ${paymentMethod === 'online' ? 'bg-blue-100' : 'bg-gray-100'
-                          }`}>
-                          <i className="fas fa-credit-card text-2xl text-blue-600"></i>
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-lg">Online Payment</h3>
-                          <p className="text-sm text-gray-600 mt-1">Secure payment via Stripe</p>
-                          <p className="text-xs text-blue-600 mt-2 font-medium">✓ Instant confirmation</p>
-                        </div>
-                      </div>
+                <div className="mt-6 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <i className="fas fa-info-circle text-blue-500 mt-1"></i>
+                    <div>
+                      <p className="text-sm text-blue-800 font-medium">Cash on Delivery Only</p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        We currently only accept cash payments upon delivery. Our delivery agent will collect the payment when they deliver your order.
+                      </p>
                     </div>
-                  </label>
+                  </div>
                 </div>
               </div>
 
@@ -658,7 +606,7 @@ export default function Checkout() {
                   <div className="flex items-center gap-3">
                     <i className="fas fa-exclamation-triangle text-red-500 text-xl"></i>
                     <div>
-                      <p className="text-red-800 font-semibold">Payment Error</p>
+                      <p className="text-red-800 font-semibold">Order Error</p>
                       <p className="text-red-600 text-sm mt-1">{apiError}</p>
                     </div>
                   </div>
@@ -701,7 +649,7 @@ export default function Checkout() {
                 ))}
               </div>
 
-              {/* Price Breakdown */}
+              {/* Price Breakdown (TAX REMOVED) */}
               <div className="space-y-4 mb-8 pb-6 border-b border-gray-200">
                 <div className="flex justify-between text-gray-600">
                   <span className="flex items-center gap-2">
@@ -717,13 +665,7 @@ export default function Checkout() {
                   </span>
                   <span className="font-medium">EGP {shipping.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span className="flex items-center gap-2">
-                    <i className="fas fa-receipt text-sm"></i>
-                    Tax (10%)
-                  </span>
-                  <span className="font-medium">EGP {tax.toFixed(2)}</span>
-                </div>
+                {/* TAX LINE REMOVED */}
                 <div className="flex justify-between text-xl font-bold text-gray-900 pt-4 border-t border-gray-200">
                   <span>Total</span>
                   <span className="bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">EGP {total.toFixed(2)}</span>
@@ -735,9 +677,9 @@ export default function Checkout() {
                 type="button"
                 onClick={formik.handleSubmit}
                 disabled={loading || !formik.isValid || !selectedGovernorate}
-                className={`w-full py-5 px-6 rounded-2xl font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-500/20 shadow-lg ${loading || !formik.isValid || !selectedGovernorate
+                className={`w-full py-5 px-6 rounded-2xl font-bold text-lg transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-green-500/20 shadow-lg ${loading || !formik.isValid || !selectedGovernorate
                   ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 hover:scale-105 hover:shadow-xl'
+                  : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:from-green-600 hover:to-teal-600 hover:scale-105 hover:shadow-xl'
                   }`}
               >
                 {loading ? (
@@ -747,18 +689,31 @@ export default function Checkout() {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-3">
-                    <i className={`${paymentMethod === 'cash' ? 'fas fa-money-bill-wave' : 'fas fa-credit-card'}`}></i>
-                    {paymentMethod === 'cash' ? 'Place Order (COD)' : 'Pay Securely Now'}
+                    <i className="fas fa-money-bill-wave"></i>
+                    Place Order (Cash on Delivery)
                     <i className="fas fa-arrow-right ml-2"></i>
                   </span>
                 )}
               </button>
 
+              {/* Payment Info Note */}
+              <div className="mt-6 p-4 bg-green-50 rounded-2xl border border-green-100">
+                <div className="flex items-start gap-3">
+                  <i className="fas fa-money-bill-wave text-green-600 mt-1"></i>
+                  <div>
+                    <p className="text-sm text-green-800 font-medium">Cash Payment Instructions</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      Please prepare exact cash amount (EGP {total.toFixed(2)}) for our delivery agent. You'll receive a confirmation email with order details.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Security & Trust Badges */}
               <div className="mt-6 space-y-3">
                 <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                   <i className="fas fa-shield-alt text-green-500"></i>
-                  <span>256-bit SSL encrypted checkout</span>
+                  <span>Secure cash on delivery</span>
                 </div>
                 <div className="flex items-center justify-center gap-6 text-xs text-gray-400">
                   <span className="flex items-center gap-1">

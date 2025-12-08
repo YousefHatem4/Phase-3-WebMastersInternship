@@ -174,11 +174,10 @@ export default function Cart() {
         }
     }
 
-    // Calculate totals
+    // Calculate totals (SHIPPING REMOVED FROM CART)
     const subtotal = cartItems.reduce((total, item) => total + item.subtotal, 0)
-    const shipping = subtotal > 0 ? 15 : 0
-    const tax = subtotal * 0.1
-    const total = subtotal + shipping + tax
+    // Shipping will be calculated in checkout based on governorate
+    const total = subtotal // Only subtotal shown in cart
     const hasItems = cartItems.length > 0
 
     useEffect(() => {
@@ -449,17 +448,19 @@ export default function Cart() {
                                         <span className="text-gray-600">Subtotal</span>
                                         <span className="font-medium">EGP {subtotal.toFixed(2)}</span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">Shipping</span>
-                                        <span className="font-medium">EGP {shipping.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">Tax (10%)</span>
-                                        <span className="font-medium">EGP {tax.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between pt-4 border-t border-gray-100">
-                                        <span className="text-lg font-semibold text-gray-900">Total</span>
-                                        <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">EGP {total.toFixed(2)}</span>
+                                    {/* Shipping line REMOVED - Will be calculated in checkout */}
+                                    {/* Tax line already removed previously */}
+                                    <div className="pt-4 border-t border-gray-100">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-sm text-gray-500">Shipping will be calculated at checkout</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-lg font-semibold text-gray-900">Total</span>
+                                            <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent">EGP {total.toFixed(2)}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-2">
+                                            *Shipping costs vary by location and will be added during checkout
+                                        </p>
                                     </div>
                                 </div>
 
