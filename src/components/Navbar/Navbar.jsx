@@ -1,5 +1,5 @@
 // src/components/Navbar/Navbar.jsx
-import React, { useContext, useState } from 'react'
+import React, { useContext, useState, useEffect, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { userContext } from '../../Context/userContext'
 import { supabase } from '../../supabaseClient'
@@ -13,11 +13,131 @@ export default function Navbar() {
     // Get user data from context
     const { userToken, user, isAdmin, setUserToken, setUser } = useContext(userContext);
 
-    // Static cart data
-    const cartItemsCount = 3; // Static number of items in cart
+    // State for cart items count
+    const [cartItemsCount, setCartItemsCount] = useState(0);
+    const [isLoadingCart, setIsLoadingCart] = useState(false);
 
     // Check if user is logged in
     const isUserLoggedIn = userToken !== null;
+
+    // Fetch cart items count - useCallback to memoize the function
+    const fetchCartCount = useCallback(async (userId) => {
+        if (!userId) {
+            setCartItemsCount(0);
+            return;
+        }
+
+        try {
+            setIsLoadingCart(true);
+            const { count, error } = await supabase
+                .from('cart_items')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', userId);
+
+            if (error) throw error;
+
+            setCartItemsCount(count || 0);
+        } catch (error) {
+            console.error('Error fetching cart count:', error);
+            setCartItemsCount(0);
+        } finally {
+            setIsLoadingCart(false);
+        }
+    }, []);
+
+    // Fetch cart count when user changes or on mount
+    useEffect(() => {
+        if (isUserLoggedIn && user?.id) {
+            fetchCartCount(user.id);
+        } else {
+            setCartItemsCount(0);
+        }
+    }, [isUserLoggedIn, user?.id, fetchCartCount]);
+
+    // Set up a custom event listener for cart updates
+    useEffect(() => {
+        const handleCartUpdate = () => {
+            if (isUserLoggedIn && user?.id) {
+                fetchCartCount(user.id);
+            }
+        };
+
+        // Listen for custom cart update events
+        window.addEventListener('cartUpdated', handleCartUpdate);
+
+        // Also listen for storage events (if cart updates use localStorage)
+        window.addEventListener('storage', (event) => {
+            if (event.key === 'cart_updated') {
+                handleCartUpdate();
+            }
+        });
+
+        // Subscribe to real-time database changes
+        let subscription;
+        if (isUserLoggedIn && user?.id) {
+            subscription = supabase
+                .channel(`cart-${user.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'cart_items',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    (payload) => {
+                        console.log('Cart change detected:', payload.eventType);
+                        // Debounce the fetch to avoid multiple rapid calls
+                        clearTimeout(window.cartUpdateTimeout);
+                        window.cartUpdateTimeout = setTimeout(() => {
+                            fetchCartCount(user.id);
+                        }, 300);
+                    }
+                )
+                .subscribe();
+        }
+
+        // Cleanup
+        return () => {
+            window.removeEventListener('cartUpdated', handleCartUpdate);
+            window.removeEventListener('storage', handleCartUpdate);
+            clearTimeout(window.cartUpdateTimeout);
+
+            if (subscription) {
+                supabase.removeChannel(subscription);
+            }
+        };
+    }, [isUserLoggedIn, user?.id, fetchCartCount]);
+
+    // Create a function to manually trigger cart refresh
+    const refreshCartCount = useCallback(() => {
+        if (isUserLoggedIn && user?.id) {
+            fetchCartCount(user.id);
+        }
+    }, [isUserLoggedIn, user?.id, fetchCartCount]);
+
+    // Listen for page focus/blur events to refresh cart
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (!document.hidden && isUserLoggedIn && user?.id) {
+                // Refresh cart when page becomes visible again
+                refreshCartCount();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', refreshCartCount);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', refreshCartCount);
+        };
+    }, [isUserLoggedIn, user?.id, refreshCartCount]);
+
+    // Listen for route changes to refresh cart
+    useEffect(() => {
+        refreshCartCount();
+    }, [location.pathname, refreshCartCount]);
 
     async function logOut() {
         try {
@@ -28,6 +148,9 @@ export default function Navbar() {
             setUserToken(null);
             setUser(null);
             localStorage.removeItem('userToken');
+
+            // Reset cart count
+            setCartItemsCount(0);
 
             // Navigate to home
             navigate('/');
@@ -53,12 +176,22 @@ export default function Navbar() {
                 <div className="flex items-center md:order-2 space-x-3 md:space-x-0 rtl:space-x-reverse">
                     {isUserLoggedIn && <>
                         <Link to={'wishlist'}><i className={`${currentPath === '/wishlist' ? 'fa-solid fa-heart bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'fa-regular fa-heart'} text-gray-800 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent cursor-pointer transition-all duration-300 text-2xl`}></i></Link>
-                        <Link to={'cart'}><i className={`${currentPath === '/cart' ? 'fa-solid fa-cart-shopping bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'fa-solid fa-cart-shopping'} relative md:ms-2 text-gray-800 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent cursor-pointer transition-all duration-300 text-2xl`}></i>
-                            {cartItemsCount > 0 && <>
-                                <span className='absolute right-15 top-3 md:top-2 md:right-32 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium text-sm px-1.5 rounded-full'>
-                                    {cartItemsCount}
+                        <Link to={'cart'} className="relative">
+                            <i className={`${currentPath === '/cart' ? 'fa-solid fa-cart-shopping bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'fa-solid fa-cart-shopping'} md:ms-2 text-gray-800 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent cursor-pointer transition-all duration-300 text-2xl`}></i>
+                            {cartItemsCount > 0 && (
+                                <span className='absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5 rounded-full'>
+                                    {isLoadingCart ? (
+                                        <div className="animate-spin rounded-full h-2 w-2 border-b-1 border-white"></div>
+                                    ) : (
+                                        cartItemsCount > 99 ? '99+' : cartItemsCount
+                                    )}
                                 </span>
-                            </>}
+                            )}
+                            {cartItemsCount === 0 && !isLoadingCart && isUserLoggedIn && (
+                                <span className='absolute -top-2 -right-2 bg-gray-300 text-white font-medium text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5 rounded-full'>
+                                    0
+                                </span>
+                            )}
                         </Link>
                     </>}
 
@@ -86,7 +219,7 @@ export default function Navbar() {
                                 <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-teal-500 transition-all duration-600 md:duration-300 group-hover:w-full"></span>
                             </Link>
                         </li>
-                     
+
                         <li>
                             <Link to={'category'} onClick={() => setMenuOpen(false)} className={`block py-2 px-3 ${currentPath === '/category' ? 'bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent' : 'text-gray-900 hover:bg-gradient-to-r hover:from-blue-600 hover:to-teal-500 hover:bg-clip-text hover:text-transparent'} rounded md:p-0 relative group transition-all duration-300`}>
                                 Categories

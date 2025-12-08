@@ -1,4 +1,4 @@
-// Admin.jsx - UPDATED WITH GMAIL INTEGRATION FOR ORDER STATUS UPDATES
+// Admin.jsx - FIXED VERSION WITH CATEGORY FIELD
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -8,7 +8,7 @@ import {
     FaSpinner, FaCheck, FaTimes, FaTags, FaTag,
     FaImage, FaTimesCircle, FaShoppingBag, FaTruck,
     FaMoneyBillWave, FaMapMarkerAlt, FaGlobeAfrica,
-    FaEnvelope
+    FaEnvelope, FaUserCheck
 } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +28,7 @@ export default function Admin() {
         totalOrders: 0,
         totalUsers: 0,
         totalRevenue: 0,
+        totalUsersOrdered: 0 // New stat for users who ordered
     });
 
     // Form states for products
@@ -247,8 +248,17 @@ export default function Admin() {
         }
     };
 
-    const calculateStats = (productsData, categoriesData, ordersData, usersData) => {
+    const calculateStats = async (productsData, categoriesData, ordersData, usersData) => {
         const totalRevenue = ordersData.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
+
+        // Get unique users who have placed orders
+        const uniqueUserIds = new Set();
+        ordersData.forEach(order => {
+            if (order.user_id) {
+                uniqueUserIds.add(order.user_id);
+            }
+        });
+        const totalUsersOrdered = uniqueUserIds.size;
 
         setStats({
             totalProducts: productsData.length,
@@ -256,6 +266,7 @@ export default function Admin() {
             totalOrders: ordersData.length,
             totalUsers: usersData.length,
             totalRevenue: totalRevenue,
+            totalUsersOrdered: totalUsersOrdered
         });
     };
 
@@ -494,7 +505,14 @@ SportFlex Store Team
         setEditingShipping(null);
     };
 
-    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT
+    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT AND EDIT INTEGRATION
+    // Helper function to get category name
+    const getCategoryName = (categoryId) => {
+        if (!categoryId) return 'Uncategorized';
+        const category = categories.find(c => c.id === categoryId);
+        return category ? category.name : 'Uncategorized';
+    };
+
     const handleProductSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -502,11 +520,15 @@ SportFlex Store Team
         try {
             const { data: { session } } = await supabase.auth.getSession();
 
+            // Get category name for the category column
+            const categoryName = getCategoryName(productForm.category_id);
+
             const productData = {
                 title: productForm.title,
                 description: productForm.description,
                 price: parseFloat(productForm.price),
                 category_id: productForm.category_id || null,
+                category: categoryName,
                 stock: parseInt(productForm.stock),
                 image_url: productForm.image_url,
                 updated_at: new Date().toISOString(),
@@ -520,12 +542,12 @@ SportFlex Store Team
                     .update(productData)
                     .eq('id', editingProduct.id)
                     .select(`
-                        *,
-                        categories (
-                            id,
-                            name
-                        )
-                    `)
+                    *,
+                    categories (
+                        id,
+                        name
+                    )
+                `)
                     .single();
 
                 if (error) throw error;
@@ -540,12 +562,12 @@ SportFlex Store Team
                     .from('products')
                     .insert([productData])
                     .select(`
-                        *,
-                        categories (
-                            id,
-                            name
-                        )
-                    `)
+                    *,
+                    categories (
+                        id,
+                        name
+                    )
+                `)
                     .single();
 
                 if (error) throw error;
@@ -560,32 +582,47 @@ SportFlex Store Team
 
             if (editingProduct) {
                 setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
+                toast.success('Product updated successfully');
             } else {
                 setProducts([updatedProduct, ...products]);
+                toast.success('Product added successfully');
             }
 
-            toast.success('Product saved successfully');
             resetProductForm();
             setShowProductModal(false);
 
         } catch (error) {
             console.error('Error saving product:', error);
-            toast.error(error.message || 'Failed to save product');
+            toast.error('Failed to save product. ' + error.message);
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Update the handleProductImages function - fix the upsert issue
     const handleProductImages = async (productId) => {
         try {
             // First, delete existing additional images (keep main image if it exists)
             const { error: deleteError } = await supabase
                 .from('product_images')
                 .delete()
-                .eq('product_id', productId)
-                .neq('image_url', productForm.image_url); // Don't delete main image if it's in product_images
+                .eq('product_id', productId);
 
             if (deleteError) throw deleteError;
+
+            // First, ensure main image is in product_images table
+            if (productForm.image_url) {
+                const { error: insertMainError } = await supabase
+                    .from('product_images')
+                    .insert({
+                        product_id: productId,
+                        image_url: productForm.image_url,
+                        display_order: 0,
+                        alt_text: productForm.title
+                    });
+
+                if (insertMainError) throw insertMainError;
+            }
 
             // Then, add new additional images
             if (productForm.additionalImages.length > 0) {
@@ -602,28 +639,11 @@ SportFlex Store Team
 
                 if (insertError) throw insertError;
             }
-
-            // Also ensure main image is in product_images table
-            if (productForm.image_url) {
-                const { error: upsertError } = await supabase
-                    .from('product_images')
-                    .upsert({
-                        product_id: productId,
-                        image_url: productForm.image_url,
-                        display_order: 0,
-                        alt_text: productForm.title
-                    }, {
-                        onConflict: 'product_id,image_url'
-                    });
-
-                if (upsertError) throw upsertError;
-            }
         } catch (error) {
             console.error('Error handling product images:', error);
             throw error;
         }
     };
-
     const fetchProductWithImages = async (productId) => {
         try {
             // Get product
@@ -673,7 +693,7 @@ SportFlex Store Team
 
             if (error) throw error;
 
-            // Separate main image (display_order = 0) from additional images
+            // Find main image (display_order = 0) and additional images
             const mainImage = images?.find(img => img.display_order === 0);
             const additionalImages = images?.filter(img => img.display_order > 0).map(img => img.image_url) || [];
 
@@ -683,7 +703,7 @@ SportFlex Store Team
                 price: product.price,
                 category_id: product.category_id || '',
                 stock: product.stock,
-                image_url: mainImage?.image_url || product.image_url,
+                image_url: mainImage?.image_url || product.image_url || '',
                 additionalImages: additionalImages
             });
 
@@ -723,7 +743,7 @@ SportFlex Store Team
         }
     };
 
-    // CATEGORY FUNCTIONS
+    // CATEGORY FUNCTIONS WITH EDIT INTEGRATION
     const handleCategorySubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -739,6 +759,8 @@ SportFlex Store Team
                 updated_at: new Date().toISOString(),
             };
 
+            let savedCategory;
+
             if (editingCategory) {
                 const { data, error } = await supabase
                     .from('categories')
@@ -748,8 +770,12 @@ SportFlex Store Team
                     .single();
 
                 if (error) throw error;
+                savedCategory = data;
 
-                setCategories(categories.map(c => c.id === editingCategory.id ? data : c));
+                // Update products that reference this category
+                await updateProductsCategory(editingCategory.id, savedCategory.name);
+
+                setCategories(categories.map(c => c.id === editingCategory.id ? savedCategory : c));
                 toast.success('Category updated successfully');
             } else {
                 categoryData.created_by = session.user.id;
@@ -761,8 +787,9 @@ SportFlex Store Team
                     .single();
 
                 if (error) throw error;
+                savedCategory = data;
 
-                setCategories([data, ...categories]);
+                setCategories([savedCategory, ...categories]);
                 toast.success('Category added successfully');
             }
 
@@ -774,6 +801,36 @@ SportFlex Store Team
             toast.error(error.message || 'Failed to save category');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // Function to update products when category is edited
+    const updateProductsCategory = async (categoryId, categoryName) => {
+        try {
+            // Update both category_id and category columns
+            const { error } = await supabase
+                .from('products')
+                .update({
+                    category: categoryName,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('category_id', categoryId);
+
+            if (error) throw error;
+
+            // Update local state
+            setProducts(products.map(p =>
+                p.category_id === categoryId
+                    ? {
+                        ...p,
+                        category: categoryName,
+                        categories: { id: categoryId, name: categoryName }
+                    }
+                    : p
+            ));
+
+        } catch (error) {
+            console.error('Error updating products category:', error);
         }
     };
 
@@ -802,8 +859,20 @@ SportFlex Store Team
             setCategories(categories.filter(c => c.id !== categoryId));
 
             // Update products that were using this category
+            // Update both category_id and category columns
+            const { error: updateError } = await supabase
+                .from('products')
+                .update({
+                    category_id: null,
+                    category: 'Uncategorized',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('category_id', categoryId);
+
+            if (updateError) throw updateError;
+
             setProducts(products.map(p =>
-                p.category_id === categoryId ? { ...p, category_id: null, categories: null } : p
+                p.category_id === categoryId ? { ...p, category_id: null, category: 'Uncategorized', categories: null } : p
             ));
 
             calculateStats(products, categories.filter(c => c.id !== categoryId), orders, users);
@@ -887,12 +956,13 @@ SportFlex Store Team
             className="space-y-6"
         >
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
                 {[
                     { title: 'Total Products', value: stats.totalProducts, icon: <FaBox />, color: 'bg-gradient-to-r from-blue-500 to-blue-600' },
                     { title: 'Categories', value: stats.totalCategories, icon: <FaTags />, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
                     { title: 'Total Orders', value: stats.totalOrders, icon: <FaShoppingCart />, color: 'bg-gradient-to-r from-green-500 to-green-600' },
                     { title: 'Total Users', value: stats.totalUsers, icon: <FaUsers />, color: 'bg-gradient-to-r from-pink-500 to-pink-600' },
+                    { title: 'Users Ordered', value: stats.totalUsersOrdered, icon: <FaUserCheck />, color: 'bg-gradient-to-r from-indigo-500 to-indigo-600' },
                     { title: 'Revenue', value: `EGP ${stats.totalRevenue.toFixed(2)}`, icon: <FaChartLine />, color: 'bg-gradient-to-r from-orange-500 to-orange-600' }
                 ].map((stat, index) => (
                     <motion.div
@@ -975,6 +1045,192 @@ SportFlex Store Team
                     <FaPlus /> Add Product
                 </button>
             </div>
+
+            {/* Product Modal */}
+            {showProductModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800">
+                                    {editingProduct ? 'Edit Product' : 'Add New Product'}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowProductModal(false);
+                                        resetProductForm();
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                >
+                                    <FaTimes className="text-gray-500" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleProductSubmit} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Product Title *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={productForm.title}
+                                            onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Enter product title"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Price (EGP) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            required
+                                            value={productForm.price}
+                                            onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Enter price"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Category
+                                        </label>
+                                        <select
+                                            value={productForm.category_id}
+                                            onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="">Select Category</option>
+                                            {categories.map((category) => (
+                                                <option key={category.id} value={category.id}>
+                                                    {category.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Stock Quantity *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            required
+                                            value={productForm.stock}
+                                            onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Enter stock quantity"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Main Image URL *
+                                    </label>
+                                    <input
+                                        type="url"
+                                        required
+                                        value={productForm.image_url}
+                                        onChange={(e) => setProductForm({ ...productForm, image_url: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="https://example.com/image.jpg"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        value={productForm.description}
+                                        onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                                        rows="3"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Enter product description"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Additional Images
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={addAdditionalImage}
+                                            className="text-sm text-blue-600 hover:text-blue-800"
+                                        >
+                                            + Add Image URL
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {productForm.additionalImages.map((image, index) => (
+                                            <div key={index} className="flex gap-2 items-center">
+                                                <input
+                                                    type="url"
+                                                    value={image}
+                                                    onChange={(e) => {
+                                                        const newImages = [...productForm.additionalImages];
+                                                        newImages[index] = e.target.value;
+                                                        setProductForm({ ...productForm, additionalImages: newImages });
+                                                    }}
+                                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="https://example.com/image.jpg"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeAdditionalImage(index)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                >
+                                                    <FaTimesCircle />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowProductModal(false);
+                                            resetProductForm();
+                                        }}
+                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading}
+                                        className="px-6 py-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <FaSpinner className="animate-spin" />
+                                        ) : (
+                                            <FaCheck />
+                                        )}
+                                        {editingProduct ? 'Update Product' : 'Add Product'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
 
             {isInitializing ? (
                 <div className="flex justify-center items-center h-64">
@@ -1065,6 +1321,114 @@ SportFlex Store Team
                 </button>
             </div>
 
+            {/* Category Modal */}
+            {showCategoryModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800">
+                                    {editingCategory ? 'Edit Category' : 'Add New Category'}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowCategoryModal(false);
+                                        resetCategoryForm();
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                >
+                                    <FaTimes className="text-gray-500" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCategorySubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Category Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={categoryForm.name}
+                                        onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                        placeholder="Enter category name"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        value={categoryForm.description}
+                                        onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                                        rows="3"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                        placeholder="Enter category description"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Image URL
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={categoryForm.image_url}
+                                        onChange={(e) => setCategoryForm({ ...categoryForm, image_url: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                        placeholder="https://example.com/image.jpg"
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active"
+                                        checked={categoryForm.is_active}
+                                        onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+                                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                                    />
+                                    <label htmlFor="is_active" className="text-sm text-gray-700">
+                                        Active Category
+                                    </label>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCategoryModal(false);
+                                            resetCategoryForm();
+                                        }}
+                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading}
+                                        className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <FaSpinner className="animate-spin" />
+                                        ) : (
+                                            <FaCheck />
+                                        )}
+                                        {editingCategory ? 'Update Category' : 'Add Category'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
             {isInitializing ? (
                 <div className="flex justify-center items-center h-64">
                     <FaSpinner className="animate-spin text-4xl text-blue-500" />
@@ -1141,6 +1505,147 @@ SportFlex Store Team
                 </button>
             </div>
 
+            {/* Shipping Modal */}
+            {showShippingModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+                    >
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800">
+                                    {editingShipping ? 'Edit Shipping Cost' : 'Add Shipping Cost'}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowShippingModal(false);
+                                        resetShippingForm();
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                >
+                                    <FaTimes className="text-gray-500" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleShippingSubmit} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Governorate (English) *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={shippingForm.governorate}
+                                            onChange={(e) => setShippingForm({ ...shippingForm, governorate: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            placeholder="Cairo"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Governorate (Arabic)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={shippingForm.governorate_ar}
+                                            onChange={(e) => setShippingForm({ ...shippingForm, governorate_ar: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 font-arabic"
+                                            placeholder="القاهرة"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Cost (EGP) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            required
+                                            value={shippingForm.cost}
+                                            onChange={(e) => setShippingForm({ ...shippingForm, cost: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            placeholder="30.00"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Delivery Days *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            required
+                                            value={shippingForm.delivery_days}
+                                            onChange={(e) => setShippingForm({ ...shippingForm, delivery_days: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            placeholder="3"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        value={shippingForm.notes}
+                                        onChange={(e) => setShippingForm({ ...shippingForm, notes: e.target.value })}
+                                        rows="2"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        placeholder="Additional notes about this shipping area"
+                                    />
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="shipping_active"
+                                        checked={shippingForm.is_active}
+                                        onChange={(e) => setShippingForm({ ...shippingForm, is_active: e.target.checked })}
+                                        className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                                    />
+                                    <label htmlFor="shipping_active" className="text-sm text-gray-700">
+                                        Active Shipping Area
+                                    </label>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowShippingModal(false);
+                                            resetShippingForm();
+                                        }}
+                                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading}
+                                        className="px-6 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-lg hover:from-orange-600 hover:to-yellow-600 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <FaSpinner className="animate-spin" />
+                                        ) : (
+                                            <FaCheck />
+                                        )}
+                                        {editingShipping ? 'Update Shipping' : 'Add Shipping'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
             {isInitializing ? (
                 <div className="flex justify-center items-center h-64">
                     <FaSpinner className="animate-spin text-4xl text-blue-500" />
@@ -1206,7 +1711,9 @@ SportFlex Store Team
         >
             <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-800">Order Management</h3>
-            
+                <div className="text-sm text-gray-600">
+                    <span className="font-medium">Users who ordered: {stats.totalUsersOrdered}</span>
+                </div>
             </div>
 
             {isInitializing ? (
@@ -1279,7 +1786,7 @@ SportFlex Store Team
                                                     {order.status || 'Pending'}
                                                 </span>
                                             </div>
-                                           
+
                                         </td>
                                         <td className="py-4 px-6">
                                             <div className="flex gap-2">
@@ -1299,7 +1806,7 @@ SportFlex Store Team
                                                     className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors"
                                                     title="Email Customer"
                                                 >
-                                                  
+                                                    <FaEnvelope />
                                                 </button>
                                             </div>
                                         </td>
@@ -1356,8 +1863,6 @@ SportFlex Store Team
         </motion.div>
     );
 
- 
-
     // Update sidebar navigation
     const sidebarItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
@@ -1401,8 +1906,7 @@ SportFlex Store Team
                         <div className="bg-white rounded-2xl shadow-lg p-4">
                             <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-xl">
                                 <h2 className="text-xl font-bold">Admin Panel</h2>
-                                <p className="text-sm opacity-90 mt-1">SportFlex Store Team
- Store</p>
+                                <p className="text-sm opacity-90 mt-1">SportFlex Store Team Store</p>
                             </div>
                             <nav className="space-y-2">
                                 {sidebarItems.map((item) => (

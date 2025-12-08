@@ -28,6 +28,15 @@ export default function Cart() {
         }
     }
 
+    // Function to trigger cart update event for navbar
+    const triggerCartUpdate = () => {
+        // Dispatch custom event for navbar to listen to
+        window.dispatchEvent(new CustomEvent('cartUpdated'));
+
+        // Also set a flag in localStorage for cross-tab communication
+        localStorage.setItem('cart_updated', Date.now().toString());
+    };
+
     // Fetch cart items from database
     const fetchCartItems = async (userId) => {
         try {
@@ -110,6 +119,7 @@ export default function Cart() {
             ))
 
             toast.success('Quantity updated')
+            triggerCartUpdate() // Trigger navbar update
         } catch (error) {
             console.error('Error updating quantity:', error)
             toast.error('Failed to update quantity')
@@ -134,6 +144,7 @@ export default function Cart() {
             setCartItems(prev => prev.filter(item => item.id !== cartItemId))
 
             toast.success('Item removed from cart')
+            triggerCartUpdate() // Trigger navbar update
         } catch (error) {
             console.error('Error removing item:', error)
             toast.error('Failed to remove item')
@@ -166,6 +177,7 @@ export default function Cart() {
 
             setCartItems([])
             toast.success('Cart cleared successfully')
+            triggerCartUpdate() // Trigger navbar update
         } catch (error) {
             console.error('Error clearing cart:', error)
             toast.error('Failed to clear cart')
@@ -390,14 +402,11 @@ export default function Cart() {
 
                                         {/* Subtotal and Actions */}
                                         <div className="md:col-span-2 flex items-center justify-between">
-                                            <div>
-                                                <span className="text-gray-900 font-medium md:hidden">Subtotal: </span>
-                                                <p className="text-gray-900 font-semibold">EGP {item.subtotal.toFixed(2)}</p>
-                                            </div>
-                                            <div className="flex gap-2">
+                                           
+                                            <div className="flex gap-3">
                                                 <button
                                                     onClick={() => moveToWishlist(item.product.id)}
-                                                    className="text-gray-400 cursor-pointer hover:text-pink-500 transition p-2"
+                                                    className="text-gray-400 cursor-pointer hover:text-pink-500 transition "
                                                     disabled={isLoading}
                                                     title="Move to wishlist"
                                                 >
@@ -405,12 +414,16 @@ export default function Cart() {
                                                 </button>
                                                 <button
                                                     onClick={() => removeItem(item.id)}
-                                                    className="text-gray-400 cursor-pointer hover:text-blue-500 transition p-2"
+                                                    className="text-gray-400 cursor-pointer hover:text-blue-500 transition "
                                                     disabled={isLoading}
                                                     title="Remove item"
                                                 >
                                                     <i className="fas fa-trash"></i>
                                                 </button>
+                                                <div>
+                                                    <span className="text-gray-900 font-medium md:hidden">Subtotal: </span>
+                                                    <p className="text-gray-900 font-semibold">EGP {item.subtotal.toFixed(2)}</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </motion.div>
@@ -422,7 +435,7 @@ export default function Cart() {
                                     <i className="fas fa-shopping-cart text-6xl"></i>
                                 </div>
                                 <h3 className="text-xl font-medium text-gray-700 mb-2">Your cart is empty</h3>
-                                    <p className="text-gray-500 mb-6">Looks like you haven't added any SportFlex items to your cart yet.</p>
+                                <p className="text-gray-500 mb-6">Looks like you haven't added any SportFlex items to your cart yet.</p>
                                 <Link
                                     to="/products"
                                     className="inline-flex items-center px-5 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium rounded-lg hover:from-blue-600 hover:to-teal-600 transition"
