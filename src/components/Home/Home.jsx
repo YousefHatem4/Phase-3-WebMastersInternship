@@ -153,7 +153,7 @@ export default function Home() {
         };
 
         loadData();
-        document.title = 'Home - Sportswear Store';
+        document.title = 'Home - SportFlex Store';
     }, []);
 
     const handleAddToCart = async (productId) => {
@@ -324,7 +324,7 @@ export default function Home() {
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Our Products</h1>
                     </div>
-                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mt-5 sm:mt-7 mb-6 sm:mb-10 text-gray-800'>Explore Our Sportswear</h1>
+                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mt-5 sm:mt-7 mb-6 sm:mb-10 text-gray-800'>Explore Our SportFlex</h1>
                 </motion.div>
 
                 {/* Products Grid */}
@@ -456,8 +456,8 @@ export default function Home() {
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Categories</h1>
                     </div>
-                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 text-gray-800'>Browse Sportswear Categories</h1>
-                    <p className='text-gray-600 text-base lg:text-lg'>Discover our premium sportswear collections</p>
+                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 text-gray-800'>Browse SportFlex Categories</h1>
+                    <p className='text-gray-600 text-base lg:text-lg'>Discover our premium SportFlex collections</p>
                 </motion.div>
 
                 {/* Categories Grid */}
@@ -544,7 +544,7 @@ export default function Home() {
                         <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
                         <h2 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Why Choose Us</h2>
                     </div>
-                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 text-gray-800'>Premium Sportswear Experience</h1>
+                    <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 text-gray-800'>Premium SportFlex Experience</h1>
                     <p className='text-gray-600 text-base lg:text-lg max-w-2xl mx-auto'>We're committed to providing exceptional service and support at every step of your fitness journey</p>
                 </motion.div>
 

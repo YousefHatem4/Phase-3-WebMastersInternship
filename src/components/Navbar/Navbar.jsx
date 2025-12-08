@@ -41,7 +41,7 @@ export default function Navbar() {
 
     return <>
         <div className='bg-gradient-to-r from-blue-600 to-teal-500 py-3 text-center'>
-            <p className='font-serif text-white'>Summer Sale For All Sportswear And Free Express Delivery - OFF 50%! <Link to={'products'} className='ms-2 underline font-medium'>ShopNow</Link></p>
+            <p className='font-serif text-white'>Summer Sale For All SportFlex And Free Express Delivery - OFF 50%! <Link to={'products'} className='ms-2 underline font-medium'>ShopNow</Link></p>
         </div>
 
         <nav className="bg-white sticky w-full z-30 top-0 start-0 border-b border-gray-200 shadow-sm">

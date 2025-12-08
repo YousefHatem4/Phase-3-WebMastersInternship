@@ -331,7 +331,7 @@ export default function Wishlist() {
     };
 
     useEffect(() => {
-        document.title = 'Wishlist - Sportswear Store';
+        document.title = 'Wishlist - SportFlex Store';
         window.scrollTo(0, 0);
     }, []);
 
@@ -504,7 +504,7 @@ export default function Wishlist() {
                             <i className="fa-regular fa-heart text-8xl"></i>
                         </div>
                         <h3 className="text-2xl font-semibold text-gray-800 mb-2">Your wishlist is empty</h3>
-                        <p className="text-gray-600 mb-6">Start adding your favorite sportswear items to your wishlist!</p>
+                            <p className="text-gray-600 mb-6">Start adding your favorite SportFlex items to your wishlist!</p>
                         <Link
                             to="/products"
                             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium rounded-lg hover:from-blue-600 hover:to-teal-600 transition-colors duration-300"

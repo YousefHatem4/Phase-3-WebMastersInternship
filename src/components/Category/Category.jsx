@@ -14,7 +14,7 @@ export default function Category() {
     // Fetch categories and product counts from database
     useEffect(() => {
         fetchCategories();
-        document.title = 'Categories - Sportswear Store';
+        document.title = 'Categories - SportFlex Store';
     }, []);
 
     const fetchCategories = async () => {
@@ -58,6 +58,7 @@ export default function Category() {
     };
 
     const handleCategoryClick = (categoryId) => {
+        // Navigate to products page with category parameter
         navigate(`/products?category=${categoryId}`);
     };
 
@@ -83,13 +84,13 @@ export default function Category() {
             >
                 <div className='flex items-center gap-5 mb-4'>
                     <div className='bg-gradient-to-r from-blue-500 to-teal-400 w-[20px] h-[40px] rounded-lg'></div>
-                    <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>Sportswear Categories</h1>
+                    <h1 className='bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-bold text-sm sm:text-base'>SportFlex Categories</h1>
                     <span className="bg-gradient-to-r from-blue-100 to-teal-100 text-blue-700 text-xs font-medium px-2.5 py-0.5 rounded-full">
                         {categories.length} categories
                     </span>
                 </div>
                 <h1 className='text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 text-gray-800'>Browse Our Collections</h1>
-                <p className='text-gray-600 text-base lg:text-lg'>Discover premium sportswear for every activity and lifestyle</p>
+                <p className='text-gray-600 text-base lg:text-lg'>Discover premium sportFlex for every activity and lifestyle</p>
             </motion.div>
 
             {/* Categories Grid */}
@@ -164,8 +165,6 @@ export default function Category() {
 
                             {/* Bottom border accent */}
                             <div className='absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left'></div>
-
-                          
                         </motion.div>
                     ))}
                 </div>

@@ -107,6 +107,116 @@ export default function OrderDetails() {
         }
     }
 
+    // GMAIL INTEGRATION FOR ORDER STATUS UPDATES
+    const sendStatusUpdateEmail = (order, newStatus) => {
+        // Create formatted email content
+        const emailBody = `
+Dear ${order.customer_name},
+
+Your order status has been updated!
+
+===========================================
+ORDER DETAILS
+===========================================
+📦 Order Number: ${order.order_number}
+📋 Status: ${getStatusWithEmoji(newStatus)}
+📅 Order Date: ${formatDate(order.created_at)}
+💰 Total Amount: EGP ${parseFloat(order.total_amount).toFixed(2)}
+📍 Governorate: ${order.shipping_governorate || 'Not specified'}
+📦 Shipping Cost: EGP ${parseFloat(order.shipping_cost || 0).toFixed(2)}
+
+===========================================
+STATUS UPDATE DETAILS
+===========================================
+🔄 Previous Status: ${order.status || 'Pending'}
+✅ New Status: ${newStatus}
+⏰ Updated: ${new Date().toLocaleString()}
+
+${getStatusMessage(newStatus)}
+
+===========================================
+ORDER ITEMS
+===========================================
+${orderItems.map(item => `• ${item.product_title} (Qty: ${item.quantity}) - EGP ${(item.price * item.quantity).toFixed(2)}`).join('\n')}
+
+===========================================
+SHIPPING INFORMATION
+===========================================
+📦 Shipping Address: ${order.shipping_address}
+📍 Governorate: ${order.shipping_governorate || 'Not specified'}
+📱 Shipping Phone: ${order.shipping_phone || 'Not provided'}
+🏢 Shipping City: ${order.shipping_city || 'Not specified'}
+
+===========================================
+NEXT STEPS
+===========================================
+${getNextSteps(newStatus)}
+
+===========================================
+CONTACT INFORMATION
+===========================================
+📧 Customer Email: ${order.customer_email}
+📱 Customer Phone: ${order.shipping_phone || 'Not provided'}
+🏢 Shipping Address: ${order.shipping_address || 'Not specified'}
+
+===========================================
+IMPORTANT NOTES
+===========================================
+• Please keep this order number for reference
+• Contact us if you have any questions
+• Thank you for shopping with us!
+
+Best regards,
+SportFlex Store Team
+📞 Contact: +021 14082 1819
+📧 Email: yousef.hatem.developer@gmail.com
+        `.trim();
+
+        // Encode the email content
+        const encodedSubject = encodeURIComponent(`📦 Order #${order.order_number} - Status Updated to ${newStatus}`);
+        const encodedBody = encodeURIComponent(emailBody);
+
+        // Create Gmail compose URL
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(order.customer_email)}&su=${encodedSubject}&body=${encodedBody}`;
+
+        // Open Gmail in new tab
+        window.open(gmailUrl, '_blank');
+    };
+
+    // Helper functions for email content
+    const getStatusWithEmoji = (status) => {
+        const statusMap = {
+            'Pending': '⏳ Pending',
+            'Processing': '🔧 Processing',
+            'Shipped': '🚚 Shipped',
+            'Delivered': '✅ Delivered',
+            'Cancelled': '❌ Cancelled'
+        };
+        return statusMap[status] || status;
+    };
+
+    const getStatusMessage = (status) => {
+        const messages = {
+            'Pending': 'Your order has been received and is awaiting processing.',
+            'Processing': 'Your order is currently being processed. We\'re preparing your items for shipment.',
+            'Shipped': 'Great news! Your order has been shipped and is on its way to you.',
+            'Delivered': 'Your order has been successfully delivered. Thank you for shopping with us!',
+            'Cancelled': 'Your order has been cancelled. Please contact us if you have any questions.'
+        };
+        return messages[status] || 'Your order status has been updated.';
+    };
+
+    const getNextSteps = (status) => {
+        const steps = {
+            'Pending': '• We will notify you when your order starts processing\n• Estimated processing time: 24-48 hours',
+            'Processing': '• Your items are being prepared\n• You will receive shipping details soon\n• Estimated shipping time: 3-7 business days',
+            'Shipped': '• Track your shipment using the provided tracking number\n• Estimated delivery: Within 3-7 business days\n• Please ensure someone is available to receive the package',
+            'Delivered': '• Please inspect your items upon delivery\n• Contact us within 7 days for any issues\n• We hope you enjoy your purchase!',
+            'Cancelled': '• Any payments will be refunded within 5-7 business days\n• Contact us for more information\n• We hope to serve you better next time'
+        };
+        return steps[status] || '• We will contact you if any action is required';
+    };
+
     const updateOrderStatus = async (newStatus) => {
         try {
             setUpdatingStatus(true)
@@ -123,6 +233,9 @@ export default function OrderDetails() {
 
             setOrder({ ...order, status: newStatus })
             toast.success(`Order status updated to ${newStatus}`)
+
+            // Open Gmail with status update email
+            sendStatusUpdateEmail(order, newStatus)
         } catch (error) {
             console.error('Error updating order status:', error)
             toast.error('Failed to update order status')
@@ -234,7 +347,7 @@ export default function OrderDetails() {
             // Build PDF content
             printContent.innerHTML = `
                 <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3b82f6; padding-bottom: 20px;">
-                    <h1 style="color: #3b82f6; font-size: 28px; margin-bottom: 10px;">Sportswear Store</h1>
+                    <h1 style="color: #3b82f6; font-size: 28px; margin-bottom: 10px;">SportFlex Store</h1>
                     <p style="color: #6b7280; font-size: 16px;">Order Invoice</p>
                 </div>
                 
@@ -248,10 +361,10 @@ export default function OrderDetails() {
                         ${order.notes ? `<p style="color: #6b7280; margin: 5px 0;"><strong>Notes:</strong> ${order.notes}</p>` : ''}
                     </div>
                     <div style="text-align: right;">
-                        <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 10px;">Sportswear Store</h3>
+                        <h3 style="color: #1f2937; font-size: 18px; margin-bottom: 10px;">SportFlex Store</h3>
                         <p style="color: #6b7280; margin: 5px 0;">123 Sports Street</p>
                         <p style="color: #6b7280; margin: 5px 0;">Cairo, Egypt</p>
-                        <p style="color: #6b7280; margin: 5px 0;">info@sportswearstore.com</p>
+                        <p style="color: #6b7280; margin: 5px 0;">info@SportFlexstore.com</p>
                         <p style="color: #6b7280; margin: 5px 0;">+20 123 456 7890</p>
                     </div>
                 </div>
@@ -321,7 +434,7 @@ export default function OrderDetails() {
                 <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 14px;">
                     <p>Thank you for your business!</p>
                     <p>If you have any questions about this invoice, please contact our support team.</p>
-                    <p style="margin-top: 20px;">Sportswear Store • www.sportswearstore.com • +20 123 456 7890</p>
+                    <p style="margin-top: 20px;">SportFlex Store • www.SportFlexstore.com • +20 123 456 7890</p>
                 </div>
             `
 
@@ -407,9 +520,20 @@ export default function OrderDetails() {
                         </button>
                         <h1 className="text-3xl font-bold text-gray-900">Order Details</h1>
                         <p className="text-gray-600">Order #{order.order_number}</p>
+                       
                     </div>
 
                     <div className="flex gap-3 no-print">
+                        <button
+                            onClick={() => {
+                                // Open Gmail for direct contact
+                                const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(order.customer_email)}&su=${encodeURIComponent(`Regarding Your Order #${order.order_number}`)}`;
+                                window.open(gmailUrl, '_blank');
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                        >
+                            <FaEnvelope /> Email Customer
+                        </button>
                         <button
                             onClick={handlePrint}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
@@ -467,11 +591,11 @@ export default function OrderDetails() {
                                         disabled={updatingStatus}
                                         className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                                     >
-                                        <option value="Pending">Pending</option>
-                                        <option value="Processing">Processing</option>
-                                        <option value="Shipped">Shipped</option>
-                                        <option value="Delivered">Delivered</option>
-                                        <option value="Cancelled">Cancelled</option>
+                                        <option value="Pending">⏳ Pending</option>
+                                        <option value="Processing">🔧 Processing</option>
+                                        <option value="Shipped">🚚 Shipped</option>
+                                        <option value="Delivered">✅ Delivered</option>
+                                        <option value="Cancelled">❌ Cancelled</option>
                                     </select>
                                     {updatingStatus && (
                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
@@ -791,7 +915,6 @@ export default function OrderDetails() {
                     />
 
                     <div className="flex justify-end items-center mt-4">
-                       
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setNotes('')}
@@ -822,27 +945,23 @@ export default function OrderDetails() {
                 </motion.div>
             </div>
 
-            {/* Print Styles - FIXED: Removed page numbers */}
+            {/* Print Styles */}
             <style>
                 {`
           @media print {
-            /* Hide non-printable elements */
             .no-print {
               display: none !important;
             }
             
-            /* Show print-only elements */
             .print-only {
               display: block !important;
             }
             
-            /* Reset background colors */
             body, .bg-gradient-to-br, .min-h-screen {
               background: white !important;
               color: black !important;
             }
             
-            /* Remove shadows and rounded corners for print */
             .shadow-lg {
               box-shadow: none !important;
             }
@@ -851,29 +970,24 @@ export default function OrderDetails() {
               border-radius: 0 !important;
             }
             
-            /* Hide interactive elements */
             button, select, textarea, input, .no-print {
               display: none !important;
             }
             
-            /* Ensure borders are visible */
             .border, .border-t, .border-b {
               border: 1px solid #e5e7eb !important;
             }
             
-            /* Remove all margins and padding from body */
             body {
               margin: 0 !important;
               padding: 0 !important;
             }
             
-            /* Prevent page breaks inside important elements */
             .print-container {
               page-break-inside: avoid;
               break-inside: avoid;
             }
             
-            /* Main content container */
             .max-w-6xl {
               max-width: 100% !important;
               width: 100% !important;
@@ -881,7 +995,6 @@ export default function OrderDetails() {
               padding: 0 !important;
             }
             
-            /* Grid layout for print */
             .grid {
               display: block !important;
             }
@@ -897,22 +1010,18 @@ export default function OrderDetails() {
               float: none !important;
             }
             
-            /* Spacing between sections */
             .space-y-8 > * + * {
               margin-top: 20px !important;
             }
             
-            /* Font sizes for print */
             .text-3xl { font-size: 24px !important; }
             .text-xl { font-size: 18px !important; }
             .text-lg { font-size: 16px !important; }
             
-            /* Hide images that shouldn't print */
             img.no-print {
               display: none !important;
             }
             
-            /* Status badges - make them print-friendly */
             .bg-yellow-100, .bg-blue-100, .bg-green-100, .bg-red-100, .bg-purple-100 {
               background-color: #f3f4f6 !important;
               color: black !important;
@@ -920,7 +1029,6 @@ export default function OrderDetails() {
               print-color-adjust: exact;
             }
             
-            /* Color adjustments for print */
             .text-blue-600, .text-gray-900 {
               color: black !important;
             }
@@ -929,15 +1037,12 @@ export default function OrderDetails() {
               color: #4b5563 !important;
             }
             
-            /* Print-specific page setup */
             @page {
               margin: 15mm;
               size: A4;
-              /* Remove page numbers */
               counter-reset: page;
             }
             
-            /* Remove page numbers from all pages */
             @page :first {
               margin-top: 15mm;
             }
@@ -952,18 +1057,15 @@ export default function OrderDetails() {
               margin-right: 15mm;
             }
             
-            /* Completely hide any browser-generated page numbers */
             body::after, html::after, .page-number, .page-count {
               display: none !important;
               content: none !important;
             }
             
-            /* Hide any footer that might contain page numbers */
             footer, .footer, .print-footer {
               display: none !important;
             }
             
-            /* Adjust spacing for print */
             .py-8 {
               padding-top: 0 !important;
               padding-bottom: 0 !important;
@@ -977,7 +1079,6 @@ export default function OrderDetails() {
               margin-bottom: 12px !important;
             }
             
-            /* Timeline for print */
             .relative.pl-8 {
               padding-left: 20px !important;
             }
@@ -986,7 +1087,6 @@ export default function OrderDetails() {
               left: 0 !important;
             }
             
-            /* Ensure proper page breaks */
             h1, h2, h3 {
               page-break-after: avoid;
             }
@@ -1009,7 +1109,6 @@ export default function OrderDetails() {
             }
           }
           
-          /* Hide print-only elements on screen */
           .print-only {
             display: none;
           }

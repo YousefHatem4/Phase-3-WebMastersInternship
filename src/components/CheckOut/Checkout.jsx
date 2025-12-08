@@ -23,7 +23,7 @@ export default function Checkout() {
     checkUser()
     loadCartFromStorage()
     fetchShippingCosts()
-    document.title = 'Checkout - Sportswear Store'
+    document.title = 'Checkout - SportFlex Store'
   }, [])
 
   useEffect(() => {
@@ -311,7 +311,7 @@ export default function Checkout() {
               </h1>
             </div>
             <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
-              You're just one step away from getting your favorite sportswear delivered to your doorstep
+              You're just one step away from getting your favorite SportFlex delivered to your doorstep
             </p>
           </div>
         </div>

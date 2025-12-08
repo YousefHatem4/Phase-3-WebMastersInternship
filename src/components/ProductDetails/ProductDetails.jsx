@@ -353,7 +353,7 @@ export default function ProductDetails() {
     }, [id]);
 
     useEffect(() => {
-        document.title = product?.title ? `${product.title} - Sportswear Store` : 'Product Details';
+        document.title = product?.title ? `${product.title} - SportFlex Store` : 'Product Details';
     }, [product]);
 
     const sliderSettings = {

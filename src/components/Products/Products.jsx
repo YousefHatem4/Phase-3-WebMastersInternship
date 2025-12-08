@@ -1,13 +1,14 @@
-// Products.jsx - UPDATED WITH DATABASE INTEGRATION
+// Products.jsx - COMPLETE SOLUTION WITH URL PARAMETER INTEGRATION
 import React, { useEffect, useState } from 'react'
 import style from './Products.module.css'
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import { supabase } from '../../supabaseClient';
 
 export default function Products() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
@@ -17,12 +18,38 @@ export default function Products() {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Check user session
+    // Function to parse URL parameters
+    const getUrlParams = () => {
+        const searchParams = new URLSearchParams(location.search);
+        return {
+            category: searchParams.get('category') || 'all',
+            search: searchParams.get('search') || ''
+        };
+    };
+
+    // Check user session and fetch data
     useEffect(() => {
         checkUser();
-        fetchProducts();
         fetchCategories();
-    }, []);
+
+        // Get parameters from URL
+        const params = getUrlParams();
+
+        // Set state from URL parameters
+        if (params.category !== 'all') {
+            setSelectedCategory(params.category);
+        }
+
+        if (params.search) {
+            setSearchQuery(params.search);
+        }
+
+        // Fetch products with URL parameters
+        fetchProducts(params.category, params.search);
+
+        document.title = 'Products - SportFlex Store';
+        window.scrollTo(0, 0);
+    }, [location]);
 
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -34,8 +61,8 @@ export default function Products() {
         }
     };
 
-    // Fetch products from database
-    const fetchProducts = async (categoryId = 'all') => {
+    // Fetch products from database with optional filters
+    const fetchProducts = async (categoryId = 'all', search = '') => {
         try {
             setLoading(true);
 
@@ -56,8 +83,8 @@ export default function Products() {
             }
 
             // Filter by search query
-            if (searchQuery) {
-                query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+            if (search) {
+                query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
             }
 
             const { data, error } = await query;
@@ -243,24 +270,54 @@ export default function Products() {
 
     const handleCategoryChange = (categoryId) => {
         setSelectedCategory(categoryId);
-        fetchProducts(categoryId);
+
+        // Update URL with category parameter
+        const params = new URLSearchParams(location.search);
+
+        if (categoryId === 'all') {
+            params.delete('category');
+        } else {
+            params.set('category', categoryId);
+        }
+
+        // Preserve search query if exists
+        if (searchQuery) {
+            params.set('search', searchQuery);
+        }
+
+        navigate(`/products?${params.toString()}`);
+        fetchProducts(categoryId, searchQuery);
     };
 
     const handleSearch = (e) => {
         e.preventDefault();
-        fetchProducts(selectedCategory);
+
+        // Update URL with search parameter
+        const params = new URLSearchParams(location.search);
+
+        if (searchQuery) {
+            params.set('search', searchQuery);
+        } else {
+            params.delete('search');
+        }
+
+        // Preserve category if exists
+        if (selectedCategory !== 'all') {
+            params.set('category', selectedCategory);
+        }
+
+        navigate(`/products?${params.toString()}`);
+        fetchProducts(selectedCategory, searchQuery);
     };
 
     const handleClearFilters = () => {
         setSelectedCategory('all');
         setSearchQuery('');
-        fetchProducts('all');
-    };
 
-    useEffect(() => {
-        document.title = 'Products - Sportswear Store';
-        window.scrollTo(0, 0);
-    }, []);
+        // Clear all URL parameters
+        navigate('/products');
+        fetchProducts('all', '');
+    };
 
     // Check if product is in wishlist
     const isInWishlist = (productId) => {
@@ -341,6 +398,42 @@ export default function Products() {
                         )}
                     </div>
                 </div>
+
+                {/* Active Filters Display */}
+                {(selectedCategory !== 'all' || searchQuery) && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="mb-4 flex flex-wrap gap-2 items-center"
+                    >
+                        <span className="text-sm text-gray-600">Active filters:</span>
+                        {selectedCategory !== 'all' && (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Category: {categories.find(c => c.id === selectedCategory)?.name || 'Selected'}
+                                <button
+                                    onClick={() => handleCategoryChange('all')}
+                                    className="ml-2 text-blue-600 hover:text-blue-800"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        )}
+                        {searchQuery && (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                                Search: "{searchQuery}"
+                                <button
+                                    onClick={() => {
+                                        setSearchQuery('');
+                                        handleSearch({ preventDefault: () => { } });
+                                    }}
+                                    className="ml-2 text-teal-600 hover:text-teal-800"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        )}
+                    </motion.div>
+                )}
             </motion.div>
 
             {/* Products Grid */}
@@ -355,7 +448,12 @@ export default function Products() {
                     </div>
                     <h3 className="text-2xl font-semibold text-gray-800 mb-2">No Products Found</h3>
                     <p className="text-gray-600 mb-6">
-                        {searchQuery ? `No products found for "${searchQuery}"` : 'No products available yet.'}
+                        {searchQuery
+                            ? `No products found for "${searchQuery}"`
+                            : selectedCategory !== 'all'
+                                ? `No products found in this category`
+                                : 'No products available yet.'
+                        }
                     </p>
                     <button
                         onClick={handleClearFilters}

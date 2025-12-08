@@ -10,7 +10,7 @@ export default function Login() {
     const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
-        document.title = 'Sign in - Sportswear Store'
+        document.title = 'Sign in - SportFlex Store'
     }, [])
 
     let navigate = useNavigate();
@@ -62,7 +62,7 @@ export default function Login() {
             <div className="hidden md:block w-1/2 bg-gray-100">
                 <img
                     src="/Auth_Image.jpg"
-                    alt="Sportswear Store"
+                    alt="SportFlex Store"
                     className="w-full h-full object-cover"
                 />
             </div>

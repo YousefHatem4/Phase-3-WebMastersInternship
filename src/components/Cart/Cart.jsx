@@ -181,7 +181,7 @@ export default function Cart() {
     const hasItems = cartItems.length > 0
 
     useEffect(() => {
-        document.title = 'Cart - Sportswear Store'
+        document.title = 'Cart - SportFlex Store'
     }, [])
 
     // Handle checkout - UPDATED TO NAVIGATE TO CHECKOUT PAGE
@@ -310,7 +310,7 @@ export default function Cart() {
                     <div className="bg-gradient-to-r from-blue-500 to-teal-400 w-5 h-10 rounded-md"></div>
                     <h1 className="bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent font-semibold text-2xl">Shopping Cart</h1>
                 </motion.div>
-                <p className="text-gray-600 mb-8 ml-8">Review your sportswear items and proceed to checkout</p>
+                <p className="text-gray-600 mb-8 ml-8">Review your SportFlex items and proceed to checkout</p>
 
                 {/* Cart Container */}
                 <div className="flex flex-col lg:flex-row gap-8">
@@ -422,12 +422,12 @@ export default function Cart() {
                                     <i className="fas fa-shopping-cart text-6xl"></i>
                                 </div>
                                 <h3 className="text-xl font-medium text-gray-700 mb-2">Your cart is empty</h3>
-                                <p className="text-gray-500 mb-6">Looks like you haven't added any sportswear items to your cart yet.</p>
+                                    <p className="text-gray-500 mb-6">Looks like you haven't added any SportFlex items to your cart yet.</p>
                                 <Link
                                     to="/products"
                                     className="inline-flex items-center px-5 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white font-medium rounded-lg hover:from-blue-600 hover:to-teal-600 transition"
                                 >
-                                    Browse Sportswear
+                                    Browse SportFlex
                                 </Link>
                             </div>
                         )}

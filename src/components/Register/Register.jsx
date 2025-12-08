@@ -84,7 +84,7 @@ export default function Register() {
             <div className="hidden md:block w-1/2 bg-gray-100">
                 <img
                     src="/Auth_Image.jpg"
-                    alt="Sportswear Store"
+                    alt="SportFlex Store"
                     className="w-full h-full object-cover"
                 />
             </div>

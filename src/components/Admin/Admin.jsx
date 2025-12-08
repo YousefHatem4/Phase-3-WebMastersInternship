@@ -1,4 +1,4 @@
-// Admin.jsx - UPDATED WITH SHIPPING COST MANAGEMENT
+// Admin.jsx - UPDATED WITH GMAIL INTEGRATION FOR ORDER STATUS UPDATES
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -7,7 +7,8 @@ import {
     FaSignOutAlt, FaPlus, FaEdit, FaTrash, FaEye,
     FaSpinner, FaCheck, FaTimes, FaTags, FaTag,
     FaImage, FaTimesCircle, FaShoppingBag, FaTruck,
-    FaMoneyBillWave, FaMapMarkerAlt, FaGlobeAfrica
+    FaMoneyBillWave, FaMapMarkerAlt, FaGlobeAfrica,
+    FaEnvelope
 } from 'react-icons/fa';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -258,6 +259,141 @@ export default function Admin() {
         });
     };
 
+    // GMAIL INTEGRATION FOR ORDER STATUS UPDATES
+    const sendStatusUpdateEmail = (order, newStatus) => {
+        // Create formatted email content
+        const emailBody = `
+Dear ${order.customer_name},
+
+Your order status has been updated!
+
+===========================================
+ORDER DETAILS
+===========================================
+📦 Order Number: ${order.order_number}
+📋 Status: ${getStatusWithEmoji(newStatus)}
+📅 Order Date: ${formatDate(order.created_at)}
+💰 Total Amount: EGP ${parseFloat(order.total_amount).toFixed(2)}
+📍 Governorate: ${order.shipping_governorate || 'Not specified'}
+📦 Shipping Cost: EGP ${parseFloat(order.shipping_cost || 0).toFixed(2)}
+
+===========================================
+STATUS UPDATE DETAILS
+===========================================
+🔄 Previous Status: ${order.status || 'Pending'}
+✅ New Status: ${newStatus}
+⏰ Updated: ${new Date().toLocaleString()}
+
+${getStatusMessage(newStatus)}
+
+===========================================
+NEXT STEPS
+===========================================
+${getNextSteps(newStatus)}
+
+===========================================
+CONTACT INFORMATION
+===========================================
+📧 Customer Email: ${order.customer_email}
+📱 Customer Phone: ${order.customer_phone || 'Not provided'}
+🏢 Shipping Address: ${order.shipping_address || 'Not specified'}
+
+===========================================
+IMPORTANT NOTES
+===========================================
+• Please keep this order number for reference
+• Contact us if you have any questions
+• Thank you for shopping with us!
+
+Best regards,
+SportFlex Store Team
+📞 Contact: +021 14082 1819
+📧 Email: yousef.hatem.developer@gmail.com
+        `.trim();
+
+        // Encode the email content
+        const encodedSubject = encodeURIComponent(`📦 Order #${order.order_number} - Status Updated to ${newStatus}`);
+        const encodedBody = encodeURIComponent(emailBody);
+
+        // Create Gmail compose URL
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(order.customer_email)}&su=${encodedSubject}&body=${encodedBody}`;
+
+        // Open Gmail in new tab
+        window.open(gmailUrl, '_blank');
+    };
+
+    // Helper functions for email content
+    const getStatusWithEmoji = (status) => {
+        const statusMap = {
+            'Pending': '⏳ Pending',
+            'Processing': '🔧 Processing',
+            'Shipped': '🚚 Shipped',
+            'Delivered': '✅ Delivered',
+            'Cancelled': '❌ Cancelled'
+        };
+        return statusMap[status] || status;
+    };
+
+    const getStatusMessage = (status) => {
+        const messages = {
+            'Pending': 'Your order has been received and is awaiting processing.',
+            'Processing': 'Your order is currently being processed. We\'re preparing your items for shipment.',
+            'Shipped': 'Great news! Your order has been shipped and is on its way to you.',
+            'Delivered': 'Your order has been successfully delivered. Thank you for shopping with us!',
+            'Cancelled': 'Your order has been cancelled. Please contact us if you have any questions.'
+        };
+        return messages[status] || 'Your order status has been updated.';
+    };
+
+    const getNextSteps = (status) => {
+        const steps = {
+            'Pending': '• We will notify you when your order starts processing\n• Estimated processing time: 24-48 hours',
+            'Processing': '• Your items are being prepared\n• You will receive shipping details soon\n• Estimated shipping time: 3-7 business days',
+            'Shipped': '• Track your shipment using the provided tracking number\n• Estimated delivery: Within 3-7 business days\n• Please ensure someone is available to receive the package',
+            'Delivered': '• Please inspect your items upon delivery\n• Contact us within 7 days for any issues\n• We hope you enjoy your purchase!',
+            'Cancelled': '• Any payments will be refunded within 5-7 business days\n• Contact us for more information\n• We hope to serve you better next time'
+        };
+        return steps[status] || '• We will contact you if any action is required';
+    };
+
+    // UPDATED ORDER STATUS HANDLER
+    const handleUpdateOrderStatus = async (orderId, newStatus) => {
+        try {
+            // Find the order
+            const order = orders.find(o => o.id === orderId);
+            if (!order) {
+                toast.error('Order not found');
+                return;
+            }
+
+            // Update order status in database
+            const { error } = await supabase
+                .from('orders')
+                .update({
+                    status: newStatus,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', orderId);
+
+            if (error) throw error;
+
+            // Update local state
+            setOrders(orders.map(order =>
+                order.id === orderId ? { ...order, status: newStatus } : order
+            ));
+
+            // Show success message
+            toast.success(`Order status updated to ${newStatus}`);
+
+            // Open Gmail with status update email
+            sendStatusUpdateEmail(order, newStatus);
+
+        } catch (error) {
+            console.error('Error updating order:', error);
+            toast.error('Failed to update order status');
+        }
+    };
+
     // SHIPPING COST FUNCTIONS
     const handleShippingSubmit = async (e) => {
         e.preventDefault();
@@ -358,7 +494,7 @@ export default function Admin() {
         setEditingShipping(null);
     };
 
-    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT (keep existing)
+    // PRODUCT FUNCTIONS WITH MULTIPLE IMAGES SUPPORT
     const handleProductSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -587,7 +723,7 @@ export default function Admin() {
         }
     };
 
-    // CATEGORY FUNCTIONS (keep existing)
+    // CATEGORY FUNCTIONS
     const handleCategorySubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -701,7 +837,7 @@ export default function Admin() {
         setEditingCategory(null);
     };
 
-    // IMAGE HANDLING FUNCTIONS (keep existing)
+    // IMAGE HANDLING FUNCTIONS
     const addAdditionalImage = () => {
         const newImage = prompt('Enter image URL:');
         if (newImage && newImage.trim() !== '') {
@@ -731,29 +867,6 @@ export default function Admin() {
         } catch (error) {
             console.error('Logout error:', error);
             toast.error('Failed to logout');
-        }
-    };
-
-    const handleUpdateOrderStatus = async (orderId, newStatus) => {
-        try {
-            const { error } = await supabase
-                .from('orders')
-                .update({
-                    status: newStatus,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', orderId);
-
-            if (error) throw error;
-
-            setOrders(orders.map(order =>
-                order.id === orderId ? { ...order, status: newStatus } : order
-            ));
-
-            toast.success('Order status updated');
-        } catch (error) {
-            console.error('Error updating order:', error);
-            toast.error('Failed to update order status');
         }
     };
 
@@ -1091,7 +1204,11 @@ export default function Admin() {
             transition={{ duration: 0.5 }}
             className="space-y-6"
         >
-            <h3 className="text-xl font-bold text-gray-800">Order Management</h3>
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">Order Management</h3>
+            
+            </div>
+
             {isInitializing ? (
                 <div className="flex justify-center items-center h-64">
                     <FaSpinner className="animate-spin text-4xl text-blue-500" />
@@ -1102,7 +1219,7 @@ export default function Admin() {
                         <table className="min-w-full">
                             <thead>
                                 <tr className="bg-gradient-to-r from-blue-50 to-teal-50">
-                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Order Number</th>
+                                    <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Order #</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Customer</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Governorate</th>
                                     <th className="py-4 px-6 text-left text-sm font-semibold text-gray-700">Date</th>
@@ -1113,39 +1230,80 @@ export default function Admin() {
                             </thead>
                             <tbody>
                                 {orders.map((order) => (
-                                    <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                                        <td className="py-4 px-6 text-sm font-medium text-gray-800">{order.order_number}</td>
-                                        <td className="py-4 px-6 text-sm text-gray-600">
-                                            <div>{order.customer_name}</div>
-                                            <div className="text-xs text-gray-500">{order.customer_email}</div>
+                                    <motion.tr
+                                        key={order.id}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                    >
+                                        <td className="py-4 px-6 text-sm font-medium text-gray-800">
+                                            <span className="inline-block px-2 py-1 bg-gray-100 rounded text-xs">
+                                                #{order.order_number}
+                                            </span>
                                         </td>
-                                        <td className="py-4 px-6 text-sm text-gray-600">{order.shipping_governorate || 'Not specified'}</td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">
+                                            <div className="font-medium">{order.customer_name}</div>
+                                            <div className="text-xs text-gray-500">{order.customer_email}</div>
+                                            <div className="text-xs text-gray-500">{order.customer_phone || 'No phone'}</div>
+                                        </td>
+                                        <td className="py-4 px-6 text-sm text-gray-600">
+                                            {order.shipping_governorate || 'Not specified'}
+                                            {order.shipping_cost && (
+                                                <div className="text-xs text-gray-500">
+                                                    EGP {parseFloat(order.shipping_cost).toFixed(2)}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="py-4 px-6 text-sm text-gray-600">{formatDate(order.created_at)}</td>
-                                        <td className="py-4 px-6 text-sm text-gray-600">EGP {parseFloat(order.total_amount).toFixed(2)}</td>
+                                        <td className="py-4 px-6 text-sm font-medium text-gray-800">
+                                            EGP {parseFloat(order.total_amount).toFixed(2)}
+                                        </td>
                                         <td className="py-4 px-6">
-                                            <select
-                                                value={order.status}
-                                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                                                className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="Pending">Pending</option>
-                                                <option value="Processing">Processing</option>
-                                                <option value="Shipped">Shipped</option>
-                                                <option value="Delivered">Delivered</option>
-                                                <option value="Cancelled">Cancelled</option>
-                                            </select>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={order.status || 'Pending'}
+                                                    onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                                    className="text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+                                                >
+                                                    <option value="Pending">⏳ Pending</option>
+                                                    <option value="Processing">🔧 Processing</option>
+                                                    <option value="Shipped">🚚 Shipped</option>
+                                                    <option value="Delivered">✅ Delivered</option>
+                                                    <option value="Cancelled">❌ Cancelled</option>
+                                                </select>
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
+                                                    order.status === 'Processing' || order.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                                                        order.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+                                                            'bg-yellow-100 text-yellow-800'
+                                                    }`}>
+                                                    {order.status || 'Pending'}
+                                                </span>
+                                            </div>
+                                           
                                         </td>
                                         <td className="py-4 px-6">
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => navigate(`/order/${order.id}`)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                                    title="View Details"
                                                 >
                                                     <FaEye />
                                                 </button>
+                                                <button
+                                                    onClick={() => {
+                                                        // Open Gmail for direct contact
+                                                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(order.customer_email)}&su=${encodeURIComponent(`Regarding Your Order #${order.order_number}`)}`;
+                                                        window.open(gmailUrl, '_blank');
+                                                    }}
+                                                    className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                                                    title="Email Customer"
+                                                >
+                                                  
+                                                </button>
                                             </div>
                                         </td>
-                                    </tr>
+                                    </motion.tr>
                                 ))}
                             </tbody>
                         </table>
@@ -1198,218 +1356,9 @@ export default function Admin() {
         </motion.div>
     );
 
-    const renderSettings = () => (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-6"
-        >
-            <h3 className="text-xl font-bold text-gray-800">Admin Settings</h3>
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="space-y-6">
-                    <div>
-                        <h4 className="font-semibold text-gray-700 mb-3">Admin Actions</h4>
-                        <div className="flex flex-col gap-3">
-                            <button
-                                onClick={loadInitialData}
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                            >
-                                <FaSpinner className={isInitializing ? 'animate-spin' : ''} /> Refresh Data
-                            </button>
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                            >
-                                <FaSignOutAlt /> Logout
-                            </button>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 className="font-semibold text-gray-700 mb-3">System Information</h4>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                                <p className="text-gray-500">Products</p>
-                                <p className="font-bold text-lg">{stats.totalProducts}</p>
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                                <p className="text-gray-500">Categories</p>
-                                <p className="font-bold text-lg">{stats.totalCategories}</p>
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                                <p className="text-gray-500">Users</p>
-                                <p className="font-bold text-lg">{stats.totalUsers}</p>
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-lg">
-                                <p className="text-gray-500">Orders</p>
-                                <p className="font-bold text-lg">{stats.totalOrders}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </motion.div>
-    );
+ 
 
-    const renderShippingModal = () => (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-            >
-                <div className="p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold text-gray-800">
-                            {editingShipping ? 'Edit Shipping Cost' : 'Add New Shipping Cost'}
-                        </h3>
-                        <button
-                            onClick={() => {
-                                setShowShippingModal(false);
-                                resetShippingForm();
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                        >
-                            ✕
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleShippingSubmit} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Governorate (English) *
-                                </label>
-                                <input
-                                    type="text"
-                                    name="governorate"
-                                    value={shippingForm.governorate}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, governorate: e.target.value })}
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="e.g., Cairo"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Governorate (Arabic)
-                                </label>
-                                <input
-                                    type="text"
-                                    name="governorate_ar"
-                                    value={shippingForm.governorate_ar}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, governorate_ar: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-arabic"
-                                    placeholder="e.g., القاهرة"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Cost (EGP) *
-                                </label>
-                                <input
-                                    type="number"
-                                    name="cost"
-                                    value={shippingForm.cost}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, cost: e.target.value })}
-                                    required
-                                    min="0"
-                                    step="0.01"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="30.00"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Delivery Days *
-                                </label>
-                                <input
-                                    type="number"
-                                    name="delivery_days"
-                                    value={shippingForm.delivery_days}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, delivery_days: e.target.value })}
-                                    required
-                                    min="1"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="3"
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="flex items-center gap-2 mb-2">
-                                    <input
-                                        type="checkbox"
-                                        name="is_active"
-                                        checked={shippingForm.is_active}
-                                        onChange={(e) => setShippingForm({ ...shippingForm, is_active: e.target.checked })}
-                                        className="rounded text-blue-500"
-                                    />
-                                    <span className="text-sm font-medium text-gray-700">Active Shipping</span>
-                                </label>
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Notes
-                                </label>
-                                <textarea
-                                    name="notes"
-                                    value={shippingForm.notes}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, notes: e.target.value })}
-                                    rows="3"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Additional notes about this shipping option..."
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowShippingModal(false);
-                                    resetShippingForm();
-                                }}
-                                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className={`px-6 py-2 rounded-lg transition-all duration-300 ${isLoading
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600'
-                                    } text-white flex items-center gap-2`}
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <FaSpinner className="animate-spin" />
-                                        Saving...
-                                    </>
-                                ) : editingShipping ? (
-                                    <>
-                                        <FaCheck />
-                                        Update Shipping Cost
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaTruck />
-                                        Add Shipping Cost
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </motion.div>
-        </div>
-    );
-
-    // Update sidebar navigation to include shipping
+    // Update sidebar navigation
     const sidebarItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <FaChartLine /> },
         { id: 'products', label: 'Products', icon: <FaBox /> },
@@ -1417,7 +1366,6 @@ export default function Admin() {
         { id: 'shipping', label: 'Shipping Costs', icon: <FaTruck /> },
         { id: 'orders', label: 'Orders', icon: <FaShoppingCart /> },
         { id: 'users', label: 'Users', icon: <FaUsers /> },
-        { id: 'settings', label: 'Settings', icon: <FaCog /> },
     ];
 
     // Update the main content render
@@ -1429,7 +1377,6 @@ export default function Admin() {
             case 'shipping': return renderShipping();
             case 'orders': return renderOrders();
             case 'users': return renderUsers();
-            case 'settings': return renderSettings();
             default: return renderDashboard();
         }
     };
@@ -1454,7 +1401,8 @@ export default function Admin() {
                         <div className="bg-white rounded-2xl shadow-lg p-4">
                             <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-xl">
                                 <h2 className="text-xl font-bold">Admin Panel</h2>
-                                <p className="text-sm opacity-90 mt-1">Sportswear Store</p>
+                                <p className="text-sm opacity-90 mt-1">SportFlex Store Team
+ Store</p>
                             </div>
                             <nav className="space-y-2">
                                 {sidebarItems.map((item) => (
@@ -1480,11 +1428,6 @@ export default function Admin() {
                     </main>
                 </div>
             </div>
-
-            {/* Modals */}
-            {showProductModal && renderProductModal()}
-            {showCategoryModal && renderCategoryModal()}
-            {showShippingModal && renderShippingModal()}
         </div>
     );
 }

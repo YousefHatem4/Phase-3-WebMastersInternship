@@ -16,7 +16,7 @@ export default function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
                     {/* Subscription Column */}
                     <div className="lg:col-span-2">
-                        <h2 className="text-2xl font-bold text-white mb-6">Sportswear Store</h2>
+                        <h2 className="text-2xl font-bold text-white mb-6">SportFlex Store</h2>
                         <h3 className="text-lg font-semibold text-white mb-3">Subscribe</h3>
                         <p className="text-gray-400 mb-4">Get 10% off your first order</p>
                         <form className="relative">
@@ -52,11 +52,10 @@ export default function Footer() {
                     <div>
                         <h3 className="text-lg font-bold text-white mb-6">Account</h3>
                         <ul className="space-y-3 text-gray-400">
-                            <li><Link to="" className="hover:text-white transition-colors">My Account</Link></li>
-                            <li><Link to="" className="hover:text-white transition-colors">Login / Register</Link></li>
-                            <li><Link to="" className="hover:text-white transition-colors">Cart</Link></li>
-                            <li><Link to="" className="hover:text-white transition-colors">Wishlist</Link></li>
-                            <li><Link to="" className="hover:text-white transition-colors">Shop</Link></li>
+               
+                            <li><Link to="/cart" className="hover:text-white transition-colors">Cart</Link></li>
+                            <li><Link to="/wishlist" className="hover:text-white transition-colors">Wishlist</Link></li>
+                            <li><Link to="/products" className="hover:text-white transition-colors">Shop</Link></li>
                         </ul>
                     </div>
 
@@ -75,7 +74,7 @@ export default function Footer() {
                 {/* Footer Bottom Bar */}
                 <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
                     <p className="text-gray-500 text-sm mb-4 md:mb-0">
-                        © {new Date().getFullYear()} Sportswear Store. All rights reserved
+                        © {new Date().getFullYear()} SportFlex Store. All rights reserved
                     </p>
                     <div className="flex space-x-6">
                         <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
