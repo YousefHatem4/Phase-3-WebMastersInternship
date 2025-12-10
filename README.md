@@ -1,7 +1,7 @@
 # 🏋️‍♂️ SportFlex — Phase 3 Project  
 > Modern sports e-commerce website built with **React**, **TailwindCSS**, and **Supabase** as Backend-as-a-Service (BaaS).
 
-🔗 **Live Demo:** https://phase-3-web-masters-internship.vercel.app/  
+🔗 **Live Demo:** [Click Here](https://phase-3-web-masters-internship-13s9nd6k0.vercel.app/)  
 
 ---
 
